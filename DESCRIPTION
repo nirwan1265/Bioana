@@ -1,6 +1,6 @@
 Package: bioana
 Title: Analyse Biodes Experiments, Simulated or Real
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person("Nirwan", "Tandukar", email = "tandukar.nirwan@gmail.com", role = c("aut", "cre"))
 Description: Reads a Biodes design folder (study_spec.json, field_layout.csv,
     sample metadata) and the data listed in its data_manifest.json, and runs
@@ -14,6 +14,8 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Depends: R (>= 4.1)
-Imports: jsonlite, stats, utils
-Suggests: lme4, lmerTest, MASS, survival, testthat (>= 3.0.0)
+Imports: jsonlite, Matrix, stats, utils
+Suggests: BGLR, DESeq2, edgeR, ggplot2, limma, lme4, lmerTest, MASS, ordinal, patchwork,
+    ranger, reformulas, rrBLUP, simitall, survival, testthat (>= 3.0.0)
+Remotes: nirwan1265/simitall
 Config/testthat/edition: 3

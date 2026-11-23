@@ -18,14 +18,16 @@
 #'   `list(bisulfite_counts = list(window_bp = 500), outcome = list(subsamples = "nest"))`;
 #'   see `inst/rules/method_parameters.tsv`.
 #' @param only Optional ids or data types to run.
-#' @return Invisibly, a list: `summary` (per data set), `results`, `paths`.
+#' @param quiet `TRUE` skips the one-line-per-data-set report.
+#' @return Invisibly, a list: `summary` (per data set, as in `bioana_summary.json`),
+#'   `results` (tables by id), `recovery` (truth tables by id, simulated data), `fits`, `paths`.
 #' @examples
 #' \dontrun{
 #' simitall::simitall_from_biodes("~/biodes_runs/my_design")   # or fill it with your data
 #' bioana_analyze("~/biodes_runs/my_design")
 #' }
 #' @export
-bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05, params = NULL, only = NULL) {
+bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05, params = NULL, only = NULL, quiet = FALSE) {
   design <- .ba_read_biodes(dir)
   man <- bioana_manifest(dir)
   if (!length(man$data)) {
@@ -34,7 +36,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   tab <- .ba_tsv("analyses")
   defaults <- .ba_tsv("method_parameters")
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
-  summ <- list(); results <- list(); paths <- character(); skipped <- list()
+  summ <- list(); results <- list(); recovery <- list(); fits <- list(); paths <- character(); skipped <- list()
   for (e in man$data) {
     if (!is.null(only) && !e$id %in% only && !e$data_type %in% only) next
     row <- tab[tab$data_type == e$data_type, , drop = FALSE]
@@ -55,14 +57,16 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     }
     summ[[e$id]] <- r$summary
     results[[e$id]] <- r$results
+    if (!is.null(r$recovery)) recovery[[e$id]] <- r$recovery
+    if (!is.null(r$fit)) fits[[e$id]] <- r$fit
     paths <- c(paths, stats::setNames(r$paths, paste0(e$id, "/", names(r$paths))))
   }
   out <- list(bioana_version = as.character(utils::packageVersion("bioana")), design = design$spec$design$chosen,
               model = design$model, handoff_version = design$spec$handoff_version,
               manifest = man$written_by %||% "", alpha = alpha, analyses = summ, not_analysed = skipped)
   paths <- c(paths, summary = .ba_write_json(out, file.path(outdir, "bioana_summary.json")))
-  .ba_report(out)
-  invisible(list(summary = out, results = results, paths = paths))
+  if (!quiet) .ba_report(out)
+  invisible(list(summary = out, results = results, recovery = recovery, fits = fits, paths = paths))
 }
 
 .ba_parse_value <- function(value, type) {

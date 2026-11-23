@@ -75,10 +75,15 @@ model-matrix column names (`treatmenttreatment_2`).
 | `R/linear_test.R` | the shared feature engine: per-feature linear model with the design's fixed terms, empirical-Bayes moderated t (limma's squeezeVar, native), BH; truth scoring by feature or by region overlap |
 | `R/method_outcome.R` | primary outcome by type (lm/lmer, glm/glmer, glm.nb, clm/clmm, coxph) and its truth scoring |
 | `R/method_features.R` | each feature data type: builds the matrix on a testable scale, then the engine |
+| `R/gwas.R`, `R/genomic_selection.R` | GWAS (rrBLUP mixed model, binary traits, truth benchmark, Manhattan/QQ) and genomic prediction / selection (moved from Simitall) |
+| `R/rnaseq_eqtl.R`, `R/scrnaseq.R` | eQTL benchmarks, RNA-seq results summary and figure; single-cell clustering, condition tests, cell-type eQTL benchmark and figure (moved) |
+| `R/peaks.R` | windowed peak calling, differential peaks, scoring against truth peaks, ChIP results figure (moved) |
+| `R/go_annotations.R`, `inst/extdata/gene_coordinates`, `inst/extdata/go` | gene-coordinate catalogues and GO joins (moved) |
+| `R/assembly.R`, `R/plot_panels.R`, `R/globals.R` | Unicycler / QUAST evaluation; saving figure panels; ggplot column names (moved) |
 | `inst/rules/analyses.tsv` | data_type -> method, status, files needed, assays, note |
 | `inst/rules/method_parameters.tsv` | settings per data type (window sizes, filters) |
 | `inst/rules/handoff.json`, `model_terms.json` | Biodes contract (supported handoff versions, model-term vocabulary); copies of Simitall's |
-| `tests/testthat/` | synthetic data in a fixture RCBD folder (no Biodes or Simitall needed) |
+| `tests/testthat/` | `test-analyze.R`: synthetic data in a fixture RCBD folder (no Biodes or Simitall needed); `test-gwas-selection.R`, `test-legacy-analyses.R`: the tests moved with the functions, which simulate with Simitall (skipped without it) |
 
 ## Adding a data type
 
@@ -91,7 +96,7 @@ model-matrix column names (`treatmenttreatment_2`).
    the same `data_type` and its truth in the standard format.
 4. A test with synthetic data in `tests/testthat/test-analyze.R`.
 
-## Status (v0.1, 2026-11-23)
+## Status (v0.2, 2026-11-23)
 
 End to end on one Simitall folder (RCBD, 2 treatments x 5 blocks, human):
 outcome CI covered; RNA-seq 9/50 true changes found (FDR 0.10, estimate r
@@ -100,22 +105,28 @@ DMR windows (FDR 0.06); m6A 2/40 (5 per group is little power for m6A);
 small RNA and microbiome 0 found (the real templates vary a lot between
 samples: signs right, r 0.75 and 0.42, but 5 per group is not enough).
 
+## Moved from Simitall (2026-11-23)
+
+All of Simitall's analysis code now lives here: GWAS, genomic selection,
+peak calling and differential peaks, single-cell clustering and tests, eQTL
+benchmarks, RNA-seq results summaries, GO annotation, assembly evaluation and
+their results figures, plus the old `bioana_fit_biodes()` (replaced by
+`bioana_analyze()`). Internal helpers were renamed `.simitall_*` ->
+`.bioana_*`; `export_simitall_plot_panels()` -> `export_bioana_plot_panels()`;
+class `simitall_genomic_model` -> `bioana_genomic_model`. Simitall keeps only
+simulation (and the helpers its simulators need, e.g. pseudobulk
+aggregation), and calls `bioana::bioana_analyze()` for its power sweep and
+`simitall_from_question()`.
+
 ## Next
 
-- `genotypes`: GWAS and QTL mapping on the line genotypes, scored against
-  `genetic_truth/qtn_truth.tsv`. Simitall still has `analyze_gwas()`,
-  genomic selection, ChIP and single-cell result code (~3,000 lines) to move
-  here in stages.
-- Single-cell at cell level (clusters, proportions).
-- Package adapters, used when installed: DESeq2 / edgeR / limma-voom for
-  counts, DSS / methylKit for methylation, ANCOM-BC for microbiome
-  (compositional), exomePeak2 for m6A. The native methods stay as the
-  fallback.
-- Analyses for the data types Simitall will add: Ribo-seq, scATAC, Hi-C,
-  MeDIP (already `ip_input_counts`), metabolomics/lipidomics, BSA/pool-seq.
-- Simitall's power sweep and `simitall_from_question()` still use
-  Simitall's own copy of the old `bioana_fit_biodes()`; switch them to
-  `bioana::bioana_analyze()` once both are installed together.
+The checklist is "Future analyses to check" in README.md. In short: wire the
+moved functions into `bioana_analyze()` (genotypes/GWAS, eQTL, single cell,
+peak calling, genomic prediction), add analyses for the data types Simitall
+will simulate (metabolomics, BSA/pool-seq, Ribo-seq, scATAC, Hi-C, degradome,
+spatial, CRISPR screens, repertoires, proteomics, reporter assays), package
+adapters with native fallbacks, random terms in feature tests, more contrasts,
+power per data type and real-data readers.
 
 ## Conventions
 

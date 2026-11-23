@@ -9,7 +9,8 @@ bioana_analyze(
   outdir = file.path(dir, "bioana"),
   alpha = 0.05,
   params = NULL,
-  only = NULL
+  only = NULL,
+  quiet = FALSE
 )
 }
 \arguments{
@@ -24,9 +25,12 @@ bioana_analyze(
 see \code{inst/rules/method_parameters.tsv}.}
 
 \item{only}{Optional ids or data types to run.}
+
+\item{quiet}{\code{TRUE} skips the one-line-per-data-set report.}
 }
 \value{
-Invisibly, a list: \code{summary} (per data set), \code{results}, \code{paths}.
+Invisibly, a list: \code{summary} (per data set, as in \code{bioana_summary.json}),
+\code{results} (tables by id), \code{recovery} (truth tables by id, simulated data), \code{fits}, \code{paths}.
 }
 \description{
 Reads the Biodes design folder (\code{study_spec.json}, \code{field_layout.csv},

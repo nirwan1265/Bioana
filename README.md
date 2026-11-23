@@ -27,8 +27,10 @@ never simulates: it treats simulated and measured data the same way.
 remotes::install_github("nirwan1265/bioana")
 ```
 
-Needs `jsonlite` and `lme4`; `lmerTest`, `MASS`, `ordinal` and `survival` are
-used for mixed models and non-Gaussian outcomes when installed.
+Needs `jsonlite`, `Matrix` and `lme4`; `lmerTest`, `MASS`, `ordinal` and
+`survival` are used for mixed models and non-Gaussian outcomes, `rrBLUP`,
+`BGLR` and `ranger` for GWAS and genomic prediction, `ggplot2` and `patchwork`
+for figures, when installed. Tests that simulate data need `simitall`.
 
 ## Quick start
 
@@ -68,11 +70,33 @@ bioana_analyze("~/biodes_runs/my_design")
 | `bisulfite_counts` | sites, methylated, coverage | WGBS, RRBS, EM-seq | sites pooled in windows per context, M-values, moderated t |
 | `methylation_beta` | beta | 450k / EPIC arrays | M-values, moderated t per probe |
 | `ip_input_counts` | ip, input | m6A MeRIP-seq, MeDIP, RIP | log2(IP/input) per window, so expression changes cancel |
-| `genotypes` | vcf | GWAS, QTL mapping | planned |
-| `single_cell_counts` | counts, cells | scRNA-seq (cell level) | planned |
+| `genotypes` | vcf | GWAS, QTL mapping | planned in `bioana_analyze()`; `analyze_gwas()` works directly |
+| `single_cell_counts` | counts, cells | scRNA-seq (cell level) | planned in `bioana_analyze()`; `cluster_scrnaseq()` works directly |
 
 Settings per data type: `inst/rules/method_parameters.tsv`, overridden with
 `bioana_analyze(dir, params = list(bisulfite_counts = list(window_bp = 500)))`.
+
+## Other analyses (moved from Simitall)
+
+These work on files directly (Simitall's simulator outputs or the same formats
+from real data) and are not yet wired into `bioana_analyze()`:
+
+| area | functions |
+|---|---|
+| GWAS | `analyze_gwas()` (mixed model with kinship and PCs, rrBLUP), `analyze_binary_gwas()`, `benchmark_gwas()` (recovery of causal variants), `plot_gwas_results()` (Manhattan, QQ) |
+| Genomic prediction and selection | `calculate_genomic_kinship()`, `fit_genomic_model()` (GBLUP, RR-BLUP, BGLR Bayesian models, random forest), `predict_genomic_values()`, `cross_validate_genomic_prediction()`, `select_parents()`, `design_parent_crosses()`, `run_genomic_selection()` |
+| eQTL and RNA-seq | `benchmark_eqtl()`, `benchmark_celltype_eqtls()` (donor pseudobulk per cell type), `summarize_rnaseq_results()`, `plot_rnaseq_eqtl_results()` |
+| Single cell | `cluster_scrnaseq()`, `score_scrnaseq_clusters()`, `test_scrnaseq_conditions()`, `score_scrnaseq_conditions()`, `plot_scrnaseq_results()` |
+| ChIP / ATAC peaks | `call_peaks_windowed()`, `score_peak_calls()`, `test_differential_peaks()`, `score_differential_peaks()`, `plot_chipseq_results()` |
+| Genes and GO | `read_gene_coordinates()` (bundled catalogues: Arabidopsis, barley, rice, wheat, maize, fly), `read_go_gaf()`, `join_gene_go()`, `summarize_go_terms()` |
+| Genome assembly | `run_unicycler_grid()`, `run_quast_grid()`, `summarize_quast()` |
+| Figures | `export_bioana_plot_panels()` saves each panel of a results figure |
+
+```r
+g <- bioana::analyze_gwas("cohort.vcf", phenotypes, "gwas_out", trait = "yield", n_pcs = 3)
+bioana::benchmark_gwas(g$paths$results, "cohort.causal.tsv")
+fit <- bioana::fit_genomic_model("cohort.geno.tsv", phenotypes, trait = "yield", model = "gblup")
+```
 
 ## Output
 
@@ -109,8 +133,67 @@ row to `analyses.tsv`. Truth files: `features` = `feature_id, condition,
 effect`; `regions` = `region_id, chr, start, end, condition, effect`; the
 tested contrast is `term` + `condition` (e.g. `treatmenttreatment_2`).
 
+## Future analyses to check
+
+Each needs an analysis here, a row in `inst/rules/analyses.tsv`, a test, and
+(for simulated data) the matching Simitall manifest entry. "Questions" = how
+many of Biodes' 4,695 paper questions need it.
+
+**Wire existing functions into `bioana_analyze()`**
+
+- [ ] `genotypes`: GWAS / QTL mapping with `analyze_gwas()` on the design's
+      line means, scored with `benchmark_gwas()` against `genetic_truth/qtn_truth.tsv`.
+- [ ] eQTL designs: `benchmark_eqtl()` on `counts.tsv` + `genotypes.vcf`.
+- [ ] Single cell at cell level: `cluster_scrnaseq()`, cell-type proportions,
+      `test_scrnaseq_conditions()`; cell-type eQTL.
+- [ ] Peaks: `call_peaks_windowed()` + `test_differential_peaks()` as the
+      peak-calling alternative to fixed windows for ChIP / ATAC.
+- [ ] Genomic prediction for breeding designs (`fit_genomic_model()`,
+      `cross_validate_genomic_prediction()`), scored against the true genetic values.
+
+**Analyses for data types Simitall will simulate**
+
+- [ ] Metabolomics / lipidomics (54 questions): log intensities, missing
+      values, moderated t; pathway / class summaries.
+- [ ] Genetics with no lines (36): BSA / QTL-seq (allele-frequency difference
+      between bulks, G' statistic), pool-seq (allele frequencies over
+      generations), population scans (Fst, selection).
+- [ ] Ribo-seq (42): translational efficiency, the RNA x footprint interaction.
+- [ ] scATAC-seq (41): peaks x cells, cluster-level differential accessibility.
+- [ ] Hi-C (38): differential contacts, loops and TAD boundaries.
+- [ ] MeDIP (31) and RIP/CLIP (14): already `ip_input_counts`; check on their
+      simulated data.
+- [ ] Degradome (22): cleavage sites and miRNA targets.
+- [ ] Spatial (19): spatially variable genes, domains.
+- [ ] MNase-seq (16): nucleosome positions and occupancy changes.
+- [ ] CRISPR screens: guide-level counts to gene scores (MAGeCK-like).
+- [ ] Amplicon genotyping: editing efficiency, allele frequencies per sample.
+- [ ] TCR/BCR repertoires: clonotype abundance and diversity.
+- [ ] Proteomics: log intensities with missing values (limma-like).
+- [ ] STARR-seq / MPRA: RNA over DNA barcode counts per element.
+- [ ] Compositional outcomes; survival with random effects (frailty / coxme).
+
+**Methods and checks**
+
+- [ ] Package adapters when installed, with the native methods as fallback:
+      DESeq2 / edgeR / limma-voom (counts), DSS / methylKit (methylation),
+      ANCOM-BC / ALDEx2 (microbiome, compositional), exomePeak2 (m6A),
+      csaw / DiffBind (peaks).
+- [ ] Random terms in feature tests (block or subject correlation, as limma
+      duplicateCorrelation / dream); the feature engine now uses fixed terms only.
+- [ ] Contrasts beyond "each level vs the reference": pairwise and interaction
+      contrasts for multi-level factors.
+- [ ] Power for every data type: Simitall's power sweep uses Bioana's scores
+      for the outcome and counts; add methylation (DMRs), m6A, peaks, GWAS.
+- [ ] Real-data readers: featureCounts / Salmon tables, Bismark coverage,
+      MACS2 peaks, VCF; QC and normalisation reports.
+- [ ] Check low power where the simulation says so: small RNA and microbiome
+      templates vary a lot between real samples (0 found with 5 per group);
+      m6A at 5 per group (2/40).
+
 ## Status
 
-Version 0.1: the analyses in the table above, tested on synthetic folders and
-end to end on Simitall output. See `AGENTS.md` for how the code is organised
-and what comes next.
+Version 0.2: `bioana_analyze()` for the data types in the first table, and
+all of Simitall's former analysis functions (second table), tested on
+synthetic folders and on Simitall output (`devtools::test()`; the moved tests
+run when Simitall is installed). See `AGENTS.md` for how the code is organised.

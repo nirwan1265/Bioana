@@ -82,6 +82,11 @@
   res$padj[test] <- stats::p.adjust(res$p[test], "BH")
   paths <- c(results = .ba_write_tsv(res, file.path(outdir, "results.tsv")))
   aov <- if (type == "continuous") tryCatch(as.data.frame(stats::anova(fit)), error = function(e) NULL) else NULL
+  if (!is.null(aov) && has_random && !"Pr(>F)" %in% names(aov) && "F value" %in% names(aov)) {
+    # lme4 without lmerTest gives F only: denominator df = rows - fixed coefficients
+    aov$DenDF <- max(1, nrow(frame) - ncol(stats::model.matrix(stats::reformulate(c("1", p$fixed_labels)), data = frame)))
+    aov[["Pr(>F)"]] <- stats::pf(aov[["F value"]], aov$npar, aov$DenDF, lower.tail = FALSE)
+  }
   summary <- list(data_type = "outcome", outcome_type = type, response = spec$primary_outcome$name %||% col,
                   method = paste(class(fit)[1], if (type == "survival") "(Cox proportional hazards)" else ""),
                   model_fitted = if (type == "survival") paste(deparse(stats::formula(fit)), collapse = "") else paste(deparse(stats::formula(fit)), collapse = ""),
@@ -90,6 +95,7 @@
                   anova = if (is.null(aov)) NULL else lapply(split(cbind(term = rownames(aov), aov), seq_len(nrow(aov))), as.list),
                   warnings = warn)
   truth <- .ba_entry_truth(entry, design$dir)
+  rec <- NULL
   if (!is.null(truth)) {
     rec <- .ba_outcome_recovery(res, truth, frame, p, alpha, type)
     if (!is.null(rec)) {
@@ -97,7 +103,7 @@
       summary$recovery <- rec$summary
     }
   }
-  list(summary = summary, paths = paths, fit = fit, results = res)
+  list(summary = summary, paths = paths, fit = fit, results = res, recovery = if (!is.null(truth)) rec$table)
 }
 
 # Coefficient table (term, estimate, se, df, statistic, p) for every supported fit.
