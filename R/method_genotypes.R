@@ -28,7 +28,7 @@
   if (!all(in_vcf)) warn <- c(warn, sprintf("%d lines have no genotypes and are left out: %s", sum(!in_vcf),
                                             paste(utils::head(means$line[!in_vcf], 5), collapse = ", ")))
   n_pcs <- .ba_gwas_n_pcs(args$n_pcs %||% "auto", design)
-  ch <- .ba_engine_chain("genotypes", design, NULL, args$engine)
+  ch <- .ba_engine_chain("genotypes", design, NULL, args$engine, args$allow_fallback)
   backends <- c(rrblup = "rrBLUP", gapit_mlm = "GAPIT", bioana_emmax = "native")
   failed <- list()
   for (eng in ch$chain) {

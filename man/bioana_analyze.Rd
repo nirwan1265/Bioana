@@ -11,7 +11,8 @@ bioana_analyze(
   params = NULL,
   only = NULL,
   quiet = FALSE,
-  secondary = NA
+  secondary = NA,
+  allow_fallback = FALSE
 )
 }
 \arguments{
@@ -36,6 +37,13 @@ session is interactive and \code{quiet = FALSE} (no otherwise). Its results go
 to \verb{<outdir>/<id>/results_<engine>.tsv}. Pick an engine per data type with
 \code{params}, e.g. \code{list(feature_counts = list(engine = "edger"))}; see
 \code{\link[=bioana_engines]{bioana_engines()}} and \code{\link[=bioana_engine_plan]{bioana_engine_plan()}}.}
+
+\item{allow_fallback}{\code{FALSE} (default): every analysis is run by a
+published package (citable); a data set whose packages are not installed
+stops with the packages to install. \code{TRUE} lets Bioana's own code run
+instead (not citable; marked \code{FALLBACK} in the report and
+\code{fallback_used} in the summary). Naming a Bioana engine in \code{params}
+(\code{engine = "bioana_native"}) also allows it for that data set.}
 }
 \value{
 Invisibly, a list: \code{summary} (per data set, as in \code{bioana_summary.json}),

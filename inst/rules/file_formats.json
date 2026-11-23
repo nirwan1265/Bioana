@@ -1,0 +1,37 @@
+{
+  "_about": "How Bioana turns a user's files into data sets. sample_name_strip: regexes removed from file and column names (in order) to get the sample id. assay_data_type: which data type a count matrix becomes for each assay label (study_spec assays / assay_kinds or the assay argument); counts default to feature_counts.",
+  "sample_name_strip": [
+    "^.*/",
+    "\\.gz$",
+    "\\.(bam|sam|cram)$",
+    "(_|\\.)?Aligned\\.sortedByCoord\\.out$",
+    "(_|\\.)?Aligned\\.out$",
+    "\\.sorted$",
+    "\\.dedup(licated)?$",
+    "(_bismark_bt2|_bismark_hisat2)?(_pe|_se)?(\\.deduplicated)?(\\.bismark)?\\.cov$",
+    "(_bismark_bt2|_bismark_hisat2)?(_pe|_se)?(\\.deduplicated)?\\.(CpG|CX|CHG|CHH)_report\\.txt$",
+    "ReadsPerGene\\.out\\.tab$",
+    "[._]$"
+  ],
+  "assay_data_type": {
+    "chipseq": "peak_counts_long",
+    "chip_seq": "peak_counts_long",
+    "cut_and_tag": "peak_counts_long",
+    "cut_and_run": "peak_counts_long",
+    "atacseq": "peak_counts_long",
+    "atac_seq": "peak_counts_long",
+    "dnase_seq": "peak_counts_long",
+    "rnaseq": "feature_counts",
+    "small_rna": "feature_counts",
+    "smallrna": "feature_counts",
+    "mirna_seq": "feature_counts",
+    "amplicon_16s": "feature_counts",
+    "microbiome": "feature_counts",
+    "ribo_seq": "feature_counts",
+    "merip_seq": "ip_input_counts",
+    "medip_seq": "ip_input_counts",
+    "rip_seq": "ip_input_counts"
+  },
+  "ip_suffix": "[._-](ip|IP|Ip)$",
+  "input_suffix": "[._-](input|Input|INPUT)$"
+}

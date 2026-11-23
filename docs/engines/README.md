@@ -18,9 +18,12 @@ it did so you can rerun it yourself.
 - **Primary** = the first installed engine in that order. **Secondary** = the
   next gold-standard engine. `bioana_analyze(dir, secondary = TRUE)` runs both
   and reports how well they agree; with `secondary = NA` (default) Bioana asks
-  in an interactive session. **Native Bioana code is fallback only**: the
-  report marks it `FALLBACK`, and the summary has `fallback_used: true` and
-  says why the gold engines were not used.
+  in an interactive session.
+- **Only published packages run by default.** With `allow_fallback = FALSE`
+  (default) a data set whose packages are not installed stops, and the
+  message names the packages to install. Bioana's own code runs only with
+  `allow_fallback = TRUE` or when named as the engine; the report marks it
+  `FALLBACK`, and the summary has `fallback_used: true` and says why.
 - Pick an engine yourself:
   `bioana_analyze(dir, params = list(feature_counts = list(engine = "edger")))`.
 

@@ -129,3 +129,19 @@ test_that("a Simitall GWAS design runs end to end", {
   expect_gt(a$recovery$tpr, 0)
   expect_gte(a$recovery$sign_agreement, 0.5)
 })
+
+test_that("without a citable GWAS engine Bioana stops and names the packages; allow_fallback runs Bioana's own scan", {
+  skip_if(requireNamespace("rrBLUP", quietly = TRUE) || requireNamespace("GAPIT", quietly = TRUE))
+  f <- gwas_folder(n_lines = 40, n_markers = 80)
+  utils::capture.output(r <- bioana_analyze(f$dir, secondary = FALSE))
+  note <- r$summary$not_analysed$genetics$note
+  expect_match(note, "No citable engine installed for genotypes")
+  expect_match(note, "rrBLUP, GAPIT")
+  expect_match(note, "allow_fallback = TRUE")
+  out <- utils::capture.output(r <- bioana_analyze(f$dir, secondary = FALSE, allow_fallback = TRUE))
+  e <- r$summary$analyses$genetics$engine
+  expect_equal(e$engine, "bioana_emmax")
+  expect_true(e$fallback_used)
+  expect_match(e$not_used$rrblup, "not installed")
+  expect_true(any(grepl("\\[genetics\\] \\[bioana .*FALLBACK\\]", out)))
+})

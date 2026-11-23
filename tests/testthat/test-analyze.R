@@ -76,6 +76,7 @@ test_that("bisulfite counts: windows over a planted DMR change, scored by overla
                                 truth = list(kind = "regions", file = "truth/meth.tsv", term = "treatment")))
   utils::capture.output(r <- bioana_analyze(d))
   rec <- r$summary$analyses$meth$recovery$treatmenttreatment_2
+  if (requireNamespace("DSS", quietly = TRUE)) expect_equal(r$summary$analyses$meth$engine$engine, "dss")
   expect_equal(rec$true_changes, 3)          # the DMR covers three 1 kb windows
   expect_equal(rec$true_positives, 3)
   expect_lt(rec$fdr, 0.3)
@@ -94,6 +95,7 @@ test_that("IP over input: an expression change alone is not an enrichment change
   write_mat(ip, file.path(d, "m6a", "ip.tsv")); write_mat(inp, file.path(d, "m6a", "input.tsv"))
   bioana_write_manifest(d, list(id = "m6a", data_type = "ip_input_counts", files = list(ip = "m6a/ip.tsv", input = "m6a/input.tsv")))
   utils::capture.output(r <- bioana_analyze(d))
+  if (requireNamespace("edgeR", quietly = TRUE)) expect_equal(r$summary$analyses$m6a$engine$engine, "edger_ip_input")
   x <- r$results$m6a
   sig <- x$feature_id[x$padj < 0.05]
   expect_gt(mean(sprintf("w%03d", 1:20) %in% sig), 0.8)

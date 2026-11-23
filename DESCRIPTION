@@ -1,6 +1,6 @@
 Package: bioana
 Title: Analyse Biodes Experiments, Simulated or Real
-Version: 0.4.0
+Version: 0.5.0
 Authors@R: person("Nirwan", "Tandukar", email = "tandukar.nirwan@gmail.com", role = c("aut", "cre"))
 Description: Reads a Biodes design folder (study_spec.json, field_layout.csv,
     sample metadata) and the data listed in its data_manifest.json, and runs
@@ -20,6 +20,6 @@ Depends: R (>= 4.1)
 Imports: jsonlite, Matrix, stats, utils
 Suggests: BGLR, BiocGenerics, bsseq, DESeq2, DSS, edgeR, GenomeInfoDb, ggplot2, glmmTMB,
     limma, lme4, lmerTest, MASS, ordinal, patchwork, ranger, reformulas, rrBLUP, simitall,
-    survival, testthat (>= 3.0.0), variancePartition
+    survival, testthat (>= 3.0.0), tximport, variancePartition
 Remotes: nirwan1265/simitall
 Config/testthat/edition: 3

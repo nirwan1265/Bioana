@@ -1,7 +1,8 @@
 # Native fallback (`bioana_native`)
 
-Bioana's own code. It runs **only** when no gold-standard engine for the data
-type is installed, or when you ask for it with
+Bioana's own code, **not citable**. It never runs by default. It runs only
+with `bioana_analyze(dir, allow_fallback = TRUE)` when no gold-standard
+engine for the data type is installed, or when you name it:
 `params = list(<data_type> = list(engine = "bioana_native"))`. When it runs:
 the report line says `FALLBACK`, `engine$fallback_used` is `true`, and
 `engine$not_used` lists the engines skipped and why.

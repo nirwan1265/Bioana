@@ -1,0 +1,10 @@
+format	file_pattern	header_pattern	required_columns	per_sample	gives	reader	tool	note
+featurecounts	\.(txt|tsv|counts|summary)?(\.gz)?$	^# Program:featureCounts	Geneid,Chr,Start,End,Strand,Length	no	counts	.ba_read_featurecounts	Subread featureCounts	sample columns are BAM paths; the BAM name (without folders and extensions) is the sample id
+salmon	quant\.(sf|genes\.sf)(\.gz)?$		Name,Length,EffectiveLength,TPM,NumReads	yes	counts	.ba_read_tximport	Salmon (gene counts via tximport)	sample id = the folder holding quant.sf; transcripts summed to genes by tximport when tx2gene is given
+kallisto	abundance\.(tsv|h5)(\.gz)?$		target_id,length,eff_length,est_counts,tpm	yes	counts	.ba_read_tximport	kallisto (gene counts via tximport)	sample id = the folder holding abundance.tsv
+star	ReadsPerGene\.out\.tab(\.gz)?$	^N_unmapped		yes	counts	.ba_read_star	STAR --quantMode GeneCounts	column by strandedness: unstranded (2), forward (3) or reverse (4); auto picks 3 or 4 when one has 5x the other's reads
+bismark_cov	\.cov(\.gz)?$	^\S+\t[0-9]+\t[0-9]+\t[0-9.]+\t[0-9]+\t[0-9]+$		yes	bisulfite	.ba_read_bismark	Bismark bismark2bedGraph / coverage2cytosine coverage	chr, start, end, percent, methylated, unmethylated
+bismark_report	(CpG|CX|CHG|CHH)_report\.txt(\.gz)?$	^\S+\t[0-9]+\t[+-]\t[0-9]+\t[0-9]+\t(CG|CHG|CHH)		yes	bisulfite	.ba_read_bismark	Bismark cytosine report	chr, pos, strand, methylated, unmethylated, context; keeps the context
+narrowpeak	\.(narrowPeak|broadPeak)(\.gz)?$			yes	peak_calls	.ba_read_peaks	MACS2 / MACS3 peak calls	peak calls only: no counts. bioana_consensus_peaks() writes a SAF to count with featureCounts -F SAF
+vcf	\.vcf(\.gz)?$	^##fileformat=VCF		no	genotypes	.ba_read_vcf_entry	any VCF 4.x	sample columns are the line or sample ids
+matrix	\.(tsv|csv|txt|tab)(\.gz)?$			no	matrix	.ba_read_plain_matrix	a feature x sample table	first column feature ids, one numeric column per sample: integers -> counts; values in [0,1] -> methylation beta; columns <id>_IP / <id>_input -> IP and input

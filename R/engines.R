@@ -61,7 +61,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
 .ba_design_kind <- function(p) if (length(p$random)) "random" else "fixed"
 
 # Ordered engines to try. `inputs` = the input kinds the data type can give (counts, values, ...).
-.ba_engine_chain <- function(key, design, inputs = NULL, override = NULL) {
+.ba_engine_chain <- function(key, design, inputs = NULL, override = NULL, allow_fallback = FALSE) {
   e <- .ba_tsv("engines")
   s <- .ba_selection_rows(key, .ba_design_kind(design$parsed))
   if (!nrow(s)) stop(sprintf("No engine rows for '%s' in engine_selection.tsv.", key), call. = FALSE)
@@ -75,8 +75,19 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   for (x in chain) {
     row <- e[e$engine == x, ]
     if (!is.null(inputs) && !row$input %in% inputs) { skipped[[x]] <- sprintf("needs %s input", row$input); next }
+    if (row$package == "bioana" && !isTRUE(allow_fallback) && !identical(x, override)) {
+      skipped[[x]] <- "Bioana's own code: off unless allow_fallback = TRUE"; next
+    }
     if (!.ba_engine_installed(row)) { skipped[[x]] <- sprintf("not installed (%s)", row$requires); next }
     keep <- c(keep, x)
+  }
+  if (!length(keep)) {
+    gold <- s$engine[e$package[match(s$engine, e$engine)] != "bioana"]
+    pk <- unique(e$package[match(gold, e$engine)])
+    stop(sprintf("No citable engine installed for %s (%s design). Install one of: %s. %s",
+                 key, .ba_design_kind(design$parsed), paste(pk, collapse = ", "),
+                 "Or run bioana_analyze(dir, allow_fallback = TRUE) to use Bioana's own code (not citable, marked FALLBACK)."),
+         call. = FALSE)
   }
   list(chain = keep, preferred = chain[1], skipped = skipped)
 }
@@ -140,10 +151,16 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
        significant = as.list(tapply(!is.na(tab$padj) & tab$padj < alpha, tab$contrast, sum)))
 }
 
+# Input kinds a method's inputs can feed (engines.tsv `input`).
+.ba_input_kinds <- function(inputs) {
+  c(if (!is.null(inputs$counts)) "counts", if (!is.null(inputs$values)) "values",
+    if (!is.null(inputs$methylated) && !is.null(inputs$coverage)) "bisulfite",
+    if (!is.null(inputs$ip) && !is.null(inputs$input)) "ip_input")
+}
+
 # Run the chain for a feature data type: first engine that works.
 .ba_feature_engines <- function(inputs, entry, design, alpha, args) {
-  ch <- .ba_engine_chain(entry$data_type, design, names(inputs), args$engine)
-  if (!length(ch$chain)) stop("No engine available: ", paste(names(ch$skipped), unlist(ch$skipped), sep = " ", collapse = "; "), call. = FALSE)
+  ch <- .ba_engine_chain(entry$data_type, design, .ba_input_kinds(inputs), args$engine, args$allow_fallback)
   failed <- list()
   for (eng in ch$chain) {
     r <- tryCatch(get(paste0(".ba_engine_", eng), envir = asNamespace("bioana"))(inputs, design, alpha, args),

@@ -83,6 +83,8 @@ model-matrix column names (`treatmenttreatment_2`).
 | `R/engines.R` | engine registry and selection (`bioana_engines()`, `bioana_engine_plan()`), feature design, the engine chain, provenance, secondary-engine concordance |
 | `R/engine_features.R` | one adapter per feature engine: DESeq2, edgeR, limma-voom, limma, dream, DSS, edgeR IP x input, native |
 | `inst/rules/engines.tsv`, `engine_selection.tsv` | the registry (package, calls, model, test, multiple testing, assumptions, reference, tutorial) and the per-data-type, per-design ranking |
+| `R/readers.R`, `inst/rules/file_formats.tsv`, `file_formats.json` | real data: format detection (`bioana_detect_format()`), readers (featureCounts, tximport for Salmon/kallisto, STAR, Bismark, VCF, plain tables, MACS peaks), `bioana_manifest_from_files()`, `bioana_consensus_peaks()` |
+| `docs/contracts/` | shared contracts proposed to the other agents (`biodes_from_data.md`) |
 | `docs/engines/` | one tutorial per engine (the package's example code, then the same through Bioana, then the gold check) |
 | `R/linear_test.R` | the shared feature engine: per-feature linear model with the design's fixed terms, empirical-Bayes moderated t (limma's squeezeVar, native), BH; truth scoring by feature or by region overlap |
 | `R/method_outcome.R` | primary outcome by type (lm/lmer, glm/glmer, glm.nb, clm/clmm, coxph) and its truth scoring |
@@ -130,7 +132,30 @@ DMR windows (FDR 0.06); m6A 2/40 (5 per group is little power for m6A);
 small RNA and microbiome 0 found (the real templates vary a lot between
 samples: signs right, r 0.75 and 0.42, but 5 per group is not enough).
 
+## User data: Biodes describes, Bioana analyses (proposed 2026-11-23)
+
+For a user's own data the flow is **Biodes -> Bioana**, no Simitall: Biodes
+describes the experiment that was done (unit, blocks, random terms,
+`analysis.model`) and writes the usual design folder; Bioana detects data
+types from the files and runs the engines. Simitall is optional afterwards
+("what effect could this design detect?") and never picks the engine; the
+engine rules live only in Bioana's `engine_selection.tsv` (Simitall reaches
+them through `bioana_analyze()`).
+
+**Contract for the Biodes window**: [docs/contracts/biodes_from_data.md](docs/contracts/biodes_from_data.md)
+(`studyforge::biodes_from_data(description, sample_sheet, ...)`, new
+optional `study_spec.origin = "observed"`, measured `primary_outcome` filled
+in, `unit_id` for subsamples, random terms for repeated units, confounding in
+`unit_audit.json`).
+
 ## Engines (v0.4, 2026-11-23)
+
+Since v0.5 `bioana_analyze(allow_fallback = FALSE)` is the default: a data
+set with no citable package installed stops and names the packages to
+install; Bioana's own code runs only with `allow_fallback = TRUE` or when
+named as the engine. Simitall's power sweep gets an error entry (not a crash)
+for such a data set; it can pass `allow_fallback = TRUE` if it wants numbers
+without the packages.
 
 Gold-standard packages replace the native statistics: DESeq2, edgeR,
 limma-voom, limma, dream, DSS, edgeR IP x input, lm/lmer/glm/glmer/glm.nb/

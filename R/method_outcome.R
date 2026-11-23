@@ -44,8 +44,7 @@
   if (type == "survival") frame$event_ <- dat$event_
   has_random <- length(.ba_findbars(f)) > 0
   fixed_f <- .ba_nobars(f)
-  ch <- .ba_engine_chain(paste0("outcome:", type), design, NULL, args$engine)
-  if (!length(ch$chain)) stop("No outcome engine installed: ", paste(names(ch$skipped), unlist(ch$skipped), collapse = "; "), call. = FALSE)
+  ch <- .ba_engine_chain(paste0("outcome:", type), design, NULL, args$engine, args$allow_fallback)
   eng <- ch$chain[1]
   fit <- if (identical(eng, "glmmtmb")) {
     if (!type %in% c("continuous", "binary", "count")) stop(sprintf("glmmTMB is set up for continuous, binary and count outcomes, not %s.", type), call. = FALSE)

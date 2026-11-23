@@ -26,6 +26,12 @@
 #'   to `<outdir>/<id>/results_<engine>.tsv`. Pick an engine per data type with
 #'   `params`, e.g. `list(feature_counts = list(engine = "edger"))`; see
 #'   [bioana_engines()] and [bioana_engine_plan()].
+#' @param allow_fallback `FALSE` (default): every analysis is run by a
+#'   published package (citable); a data set whose packages are not installed
+#'   stops with the packages to install. `TRUE` lets Bioana's own code run
+#'   instead (not citable; marked `FALLBACK` in the report and
+#'   `fallback_used` in the summary). Naming a Bioana engine in `params`
+#'   (`engine = "bioana_native"`) also allows it for that data set.
 #' @return Invisibly, a list: `summary` (per data set, as in `bioana_summary.json`),
 #'   `results` (tables by id), `recovery` (truth tables by id, simulated data), `fits`, `paths`.
 #' @examples
@@ -35,7 +41,7 @@
 #' }
 #' @export
 bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05, params = NULL, only = NULL, quiet = FALSE,
-                           secondary = NA) {
+                           secondary = NA, allow_fallback = FALSE) {
   design <- .ba_read_biodes(dir)
   man <- bioana_manifest(dir)
   if (!length(man$data)) {
@@ -57,6 +63,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     args <- stats::setNames(lapply(seq_len(nrow(d)), function(i) .ba_parse_value(d$value[i], d$type[i])), d$argument)
     args <- utils::modifyList(args, params[[e$data_type]] %||% list())
     args <- utils::modifyList(args, params[[e$id]] %||% list())
+    args$allow_fallback <- isTRUE(args$allow_fallback %||% allow_fallback)
     fn <- get(row$method, envir = asNamespace("bioana"))
     r <- tryCatch(fn(e, design, file.path(outdir, e$id), alpha, args), error = function(err) err)
     if (inherits(r, "error")) {
@@ -64,6 +71,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
       next
     }
     summ[[e$id]] <- r$summary
+    if (!is.null(e$source)) summ[[e$id]]$source <- e$source
     ran[[e$id]] <- list(entry = e, fn = fn, args = args)
     results[[e$id]] <- r$results
     if (!is.null(r$recovery)) recovery[[e$id]] <- r$recovery

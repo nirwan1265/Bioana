@@ -57,6 +57,38 @@ bioana_write_manifest("~/biodes_runs/my_design",
 bioana_analyze("~/biodes_runs/my_design")
 ```
 
+## Your own data
+
+For real data the flow is **Biodes -> Bioana** (Simitall is not needed).
+Biodes describes the experiment you ran and writes the design folder (the
+`biodes_from_data()` contract: [docs/contracts/biodes_from_data.md](docs/contracts/biodes_from_data.md)).
+Then:
+
+```r
+bioana_manifest_from_files(dir, c("featurecounts.txt", "genotypes.vcf"), assay = "rnaseq")
+bioana_analyze(dir)
+```
+
+`bioana_manifest_from_files()` detects each file's format, converts it to
+Bioana's files under `<dir>/data/<id>/`, matches sample names to
+`sample_id` (BAM paths and tool suffixes are stripped), and writes
+`data_manifest.json` with the source files and tool recorded.
+
+| format | detected by | becomes |
+|---|---|---|
+| featureCounts | `# Program:featureCounts` or its columns | counts: `feature_counts`, or peaks for ChIP/ATAC/CUT&Tag assays |
+| Salmon `quant.sf`, kallisto `abundance.tsv` (one folder per sample) | columns | gene counts via **tximport** (`tx2gene`, `lengthScaledTPM`) |
+| STAR `ReadsPerGene.out.tab` | `N_unmapped` rows | counts; strandedness detected or given |
+| Bismark `.cov` / cytosine report (one file per sample) | line pattern | `bisulfite_counts` (context kept from reports) |
+| VCF | `##fileformat=VCF` | `genotypes` |
+| plain feature x sample table | file type | integers: counts; 0-1: `methylation_beta`; `<id>_IP` / `<id>_input` columns: `ip_input_counts` |
+| MACS narrowPeak / broadPeak | file name | peak calls have no counts: `bioana_consensus_peaks()` writes a SAF to count with `featureCounts -F SAF` |
+
+Formats live in `inst/rules/file_formats.tsv` (pattern, header, columns,
+reader) and `file_formats.json` (sample-name rules, assay -> data type). A new
+format is a row and a reader. Normalised values (TPM, CPM) are refused: the
+engines need raw counts.
+
 ## Which packages it runs (gold standards, not home-made statistics)
 
 Every analysis calls a published package, chosen by two rule tables:
@@ -76,9 +108,13 @@ order per data type and per design: `fixed` = no random terms in
 | genotypes (GWAS on line means) | rrBLUP → GAPIT MLM | (kinship random effect) |
 
 The first installed engine is the **primary**; the next is the **secondary**.
+Only published packages run by default (`allow_fallback = FALSE`): if none
+is installed for a data set, Bioana stops and names the packages to install,
+so every result can be cited.
 `bioana_analyze(dir, secondary = TRUE)` runs both and reports how well they
-agree (in an interactive session Bioana asks). Bioana's own code is a
-**fallback only**, marked `FALLBACK` in the report. Every data set's
+agree (in an interactive session Bioana asks). Bioana's own code runs only
+with `allow_fallback = TRUE` (or when named as the engine), and is marked
+`FALLBACK` in the report. Every data set's
 `engine` block in `bioana_summary.json` records package, version, exact call,
 formula, model, input, assumptions, test statistic, multiple testing,
 experimental unit and whether a fallback was used.
@@ -189,6 +225,9 @@ many of Biodes' 4,695 paper questions need it.
       line means, scored with `benchmark_gwas()` against `genetic_truth/qtn_truth.tsv`.
       Next for it: GWAS per environment under GxE, ordinal and survival outcomes,
       QTL mapping with cross-aware genotype probabilities.
+- [x] Real data readers: featureCounts, Salmon/kallisto (tximport), STAR, Bismark, VCF, plain
+      tables, MACS peak calls (consensus SAF); `bioana_manifest_from_files()`. Still to do: BAM
+      input (counting, exomePeak2) and a run on Simitall's real templates.
 - [ ] eQTL designs: `benchmark_eqtl()` on `counts.tsv` + `genotypes.vcf`.
 - [ ] Single cell at cell level: `cluster_scrnaseq()`, cell-type proportions,
       `test_scrnaseq_conditions()`; cell-type eQTL.
@@ -242,7 +281,7 @@ many of Biodes' 4,695 paper questions need it.
 
 ## Status
 
-Version 0.4: `bioana_analyze()` for the data types in the first table, and
+Version 0.5: `bioana_analyze()` for the data types in the first table, and
 all of Simitall's former analysis functions (second table), tested on
 synthetic folders and on Simitall output (`devtools::test()`; the moved tests
 run when Simitall is installed). See `AGENTS.md` for how the code is organised.

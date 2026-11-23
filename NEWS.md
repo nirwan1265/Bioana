@@ -1,3 +1,20 @@
+# bioana 0.5.0
+
+- Only published packages run by default: `bioana_analyze(allow_fallback =
+  FALSE)`. A data set without an installed engine stops and names the
+  packages to install; Bioana's own code needs `allow_fallback = TRUE` (or
+  naming it as the engine) and stays marked `FALLBACK`.
+- Real data: `bioana_manifest_from_files()` detects formats
+  (`inst/rules/file_formats.tsv`), converts them and writes the manifest with
+  the source recorded: featureCounts, Salmon and kallisto through tximport,
+  STAR ReadsPerGene (strandedness detected), Bismark coverage and cytosine
+  reports, VCF, plain count / beta / IP-input tables. `bioana_detect_format()`,
+  `bioana_consensus_peaks()` (MACS peaks -> SAF for featureCounts).
+- Fix: DSS (bisulfite) and the edgeR IP x input model were never chosen inside
+  `bioana_analyze()` (the chain compared input kinds to input names), so those
+  data sets went to limma. Tests now check the engine that runs end to end.
+- `docs/contracts/biodes_from_data.md`: the Biodes "describe my data" contract.
+
 # bioana 0.4.0
 
 - Gold-standard engines. `inst/rules/engines.tsv` (registry) and
