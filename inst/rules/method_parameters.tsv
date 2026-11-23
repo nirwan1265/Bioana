@@ -1,0 +1,11 @@
+data_type	argument	value	type	note
+outcome	subsamples	aggregate	character	subsamples of one unit: aggregate (mean per unit) or nest (unit as a random effect, continuous only); as_replicates is refused
+feature_counts	min_cpm	1	numeric	features below this CPM in most samples are not tested
+peak_counts_long	min_cpm	1	numeric	peaks below this CPM in most samples are not tested
+read_positions	bin_bp	500	integer	window size for counting reads
+read_positions	min_reads	10	integer	windows with fewer reads over all samples are dropped
+read_positions	min_cpm	1	numeric	windows below this CPM in most samples are not tested
+bisulfite_counts	window_bp	1000	integer	sites pooled per window (per context)
+bisulfite_counts	min_coverage	10	numeric	windows with fewer reads in any sample are not tested
+bisulfite_counts	pool_contexts	FALSE	logical	TRUE pools CG, CHG and CHH in one window
+ip_input_counts	min_input	5	numeric	windows with a lower mean input count are not tested

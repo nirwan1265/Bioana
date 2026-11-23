@@ -1,0 +1,33 @@
+{
+  "system": "field",
+  "organism": "Zea mays",
+  "factors": [
+    {
+      "name": "treatment",
+      "n_levels": 2
+    }
+  ],
+  "design": {
+    "reps": 6,
+    "chosen": "rcbd",
+    "randomization_seed": 42
+  },
+  "primary_outcome": {
+    "name": "yield",
+    "type": "continuous"
+  },
+  "power": {
+    "residual_sd": 10,
+    "minimum_detectable_difference": 10
+  },
+  "analysis": {
+    "model": "y ~ treatment + block",
+    "terms": {
+      "treatment": "treatment",
+      "block": "block",
+      "layout_columns": ["treatment", "block"],
+      "uncovered_factors": []
+    }
+  },
+  "handoff_version": "0.4.0"
+}

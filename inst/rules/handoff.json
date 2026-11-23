@@ -1,0 +1,64 @@
+{
+  "_about": "Biodes hand-off contract as read by Simitall and Bioana. Source of truth: github.com/nirwan1265/BioDesignGPT docs/SUITE_INTEGRATION.md and inst/registry/study_spec.schema.json. Add versions here when Biodes bumps handoff_version; never remove one.",
+  "supported_handoff_versions": [
+    "0.4",
+    "0.5"
+  ],
+  "required_files": [
+    "study_spec.json",
+    "field_layout.csv",
+    "sample_metadata_template.tsv"
+  ],
+  "optional_files": [
+    "unit_audit.json",
+    "power_sensitivity.tsv"
+  ],
+  "written_by_simitall": [
+    "sample_metadata_template.tsv",
+    "counts.tsv",
+    "sim_truth.json"
+  ],
+  "written_by_bioana": [
+    "results.tsv",
+    "fit_summary.json",
+    "recovery.tsv",
+    "de_results.tsv"
+  ],
+  "unsupported_model_tokens": [
+    "spatial terms",
+    "f(",
+    "Toeplitz",
+    "coxme",
+    "Surv(",
+    "FA(",
+    "GCA_",
+    "SCA_",
+    "cor(",
+    "BLUP_",
+    "QTL",
+    "SNP",
+    "footprints",
+    "eQTL",
+    "per organism",
+    ";"
+  ],
+  "check_factor_names": [
+    "check",
+    "checks",
+    "check_variety",
+    "check_cultivar",
+    "control_check"
+  ],
+  "_check_factor_names": "Spec factors that are check entries: in augmented and p-rep layouts they share the treatment column with the test entries, so that column has entries + checks levels.",
+  "main_plot_applied_to": [
+    "main_plot",
+    "whole_plot",
+    "mainplot",
+    "distance_from_line",
+    "strip"
+  ],
+  "_main_plot_applied_to": "Spec factor applied_to values that put the factor on main plots (split-plot layouts).",
+  "satterthwaite_max_fixed_coefficients": 200,
+  "_satterthwaite_max_fixed_coefficients": "Bioana: mixed models with more fixed coefficients than this are fitted with lme4::lmer (no lmerTest Satterthwaite df, which does not finish on thousands of coefficients); p-values then use the residual df (n - rank), stated in fit_summary.json warnings.",
+  "_count_assays": "Which assays get counts.tsv is now decided by inst/suite/simulators.tsv (routes assay_rnaseq, assay_eqtl, assay_single_cell)."
+}

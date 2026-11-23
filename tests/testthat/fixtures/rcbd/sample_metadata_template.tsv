@@ -1,0 +1,13 @@
+plot	rep	block	treatment	sample_id	date_measured	primary_outcome	notes
+101	1	1	treatment_2	SF_rcbd_0001			
+102	1	1	treatment_1	SF_rcbd_0002			
+201	2	2	treatment_1	SF_rcbd_0003			
+202	2	2	treatment_2	SF_rcbd_0004			
+301	3	3	treatment_1	SF_rcbd_0005			
+302	3	3	treatment_2	SF_rcbd_0006			
+401	4	4	treatment_1	SF_rcbd_0007			
+402	4	4	treatment_2	SF_rcbd_0008			
+501	5	5	treatment_2	SF_rcbd_0009			
+502	5	5	treatment_1	SF_rcbd_0010			
+601	6	6	treatment_1	SF_rcbd_0011			
+602	6	6	treatment_2	SF_rcbd_0012			

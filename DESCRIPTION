@@ -1,0 +1,19 @@
+Package: bioana
+Title: Analyse Biodes Experiments, Simulated or Real
+Version: 0.1.0
+Authors@R: person("Nirwan", "Tandukar", email = "tandukar.nirwan@gmail.com", role = c("aut", "cre"))
+Description: Reads a Biodes design folder (study_spec.json, field_layout.csv,
+    sample metadata) and the data listed in its data_manifest.json, and runs
+    the analysis each data type calls for with the model the design calls for:
+    the primary outcome (continuous, binary, count, ordinal, survival), feature
+    counts (RNA-seq, small RNA, microbiome, ChIP and ATAC peaks), bisulfite and
+    array methylation, and m6A MeRIP-seq. When the folder comes from Simitall
+    and carries the simulated truth, every analysis is scored against it.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends: R (>= 4.1)
+Imports: jsonlite, stats, utils
+Suggests: lme4, lmerTest, MASS, survival, testthat (>= 3.0.0)
+Config/testthat/edition: 3

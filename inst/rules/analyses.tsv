@@ -1,0 +1,10 @@
+data_type	method	status	files	writes	assays	note
+outcome	.ba_method_outcome	ready	table	results.tsv, recovery.tsv	(primary outcome)	The design's analysis.model with the family of primary_outcome.type: lm/lmer (continuous), glm/glmer binomial (binary), negative binomial (count), cumulative logit clm/clmm (ordinal), Cox model (survival, needs an event column).
+feature_counts	.ba_method_feature_counts	ready	counts	results.tsv	rnaseq, eqtl (expression), single_cell (pseudobulk), small_rnaseq, microbiome, 3' tag-seq	Counts per feature (genes, miRNAs, taxa): log2-CPM, per-feature linear model with the design's fixed terms, empirical-Bayes moderated t (as limma-trend).
+peak_counts_long	.ba_method_peak_counts_long	ready	counts,libraries	results.tsv	chip_seq, dap_seq, cut_and_tag	Long table of IP reads per peak and library; libraries mapped to units; input libraries left out; then as feature_counts.
+read_positions	.ba_method_read_positions	ready	reads,libraries	results.tsv	atac_seq, dnase_seq, faire_seq	Reads counted in fixed windows (bin_bp), no peak calling; then as feature_counts. Truth peaks are matched to windows by overlap.
+bisulfite_counts	.ba_method_bisulfite_counts	ready	sites,methylated,coverage	results.tsv	methylation, wgbs, rrbs, em_seq	Methylated and total reads per cytosine pooled in windows (per context); M-value per window and unit; moderated t. Truth DMRs matched by overlap.
+methylation_beta	.ba_method_methylation_beta	ready	beta	results.tsv	methylation_array	Array beta values as M-values; moderated t per probe.
+ip_input_counts	.ba_method_ip_input	ready	ip,input	results.tsv	m6a_seq, medip, rip_clip	IP and input counts per window: log2(IP/input) with IP scaled by its median ratio to input, so expression changes cancel; moderated t.
+genotypes	-	planned	vcf		gwas, gbs, wgs, qtl_mapping	GWAS / QTL mapping on the line genotypes (Simitall's analyze_gwas and genomic selection code moves here).
+single_cell_counts	-	planned	counts,cells		single_cell	Cell-level analysis (clusters, cell-type proportions); the pseudobulk is analysed as feature_counts today.
