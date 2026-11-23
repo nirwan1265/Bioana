@@ -24,6 +24,12 @@
 #' @param p3d Estimate variance components once before scanning markers. This is
 #'   faster than marker-specific REML but can be less significant.
 #' @param fdr_threshold BH-adjusted p-value threshold used to label discoveries.
+#' @param backend `"auto"` (rrBLUP when installed, else native), `"rrBLUP"`, or
+#'   `"native"`: the same model (kinship random effect, PCs and `fixed_effects`
+#'   as fixed covariates, variance components estimated once by REML, as
+#'   EMMAX / rrBLUP with `P3D = TRUE`), then GLS per marker. The native scan
+#'   also returns each marker's effect (`beta`, `se`, per alternative allele);
+#'   rrBLUP returns only the score. `p3d = FALSE` needs rrBLUP.
 #'
 #' @return Invisibly returns a list containing the GWAS table, kinship matrix,
 #'   summary, and output paths.
@@ -51,8 +57,12 @@ analyze_gwas <- function(
     min_maf = 0.05,
     n_cores = 1L,
     p3d = TRUE,
-    fdr_threshold = 0.05) {
-  .bioana_require_package("rrBLUP", "GWAS analysis")
+    fdr_threshold = 0.05,
+    backend = c("auto", "rrBLUP", "native")) {
+  backend <- match.arg(backend)
+  if (backend == "auto") backend <- if (requireNamespace("rrBLUP", quietly = TRUE)) "rrBLUP" else "native"
+  if (backend == "rrBLUP") .bioana_require_package("rrBLUP", "GWAS analysis")
+  if (backend == "native" && !isTRUE(p3d)) stop("p3d = FALSE (marker-specific REML) needs backend = 'rrBLUP'")
   genotype_data <- .bioana_read_genotypes(genotype_file)
   sample_ids <- colnames(genotype_data$genotype)
   phenotype <- .bioana_prepare_phenotypes(
@@ -94,7 +104,7 @@ analyze_gwas <- function(
   pheno <- phenotype[observed, pheno_columns, drop = FALSE]
   names(pheno)[names(pheno) == sample_id] <- "line"
   if (is.null(kinship)) {
-    kinship <- rrBLUP::A.mat(t(rr_dosage))
+    kinship <- if (backend == "rrBLUP") rrBLUP::A.mat(t(rr_dosage)) else .bioana_kinship(rr_dosage)
   } else {
     kinship <- as.matrix(kinship)
     if (is.null(rownames(kinship)) || is.null(colnames(kinship))) {
@@ -107,22 +117,40 @@ analyze_gwas <- function(
     kinship <- kinship[observed_ids, observed_ids, drop = FALSE]
   }
 
-  scores <- rrBLUP::GWAS(
-    pheno = pheno,
-    geno = geno,
-    fixed = fixed_effects,
-    K = kinship,
-    n.PC = as.integer(n_pcs),
-    min.MAF = min_maf,
-    n.core = as.integer(n_cores),
-    P3D = isTRUE(p3d),
-    plot = FALSE
-  )
-  score_column <- setdiff(names(scores), c("marker", "chrom", "pos"))
-  if (length(score_column) != 1L) {
-    stop("rrBLUP returned an unexpected number of trait columns")
+  if (backend == "rrBLUP") {
+    scores <- rrBLUP::GWAS(
+      pheno = pheno,
+      geno = geno,
+      fixed = fixed_effects,
+      K = kinship,
+      n.PC = as.integer(n_pcs),
+      min.MAF = min_maf,
+      n.core = as.integer(n_cores),
+      P3D = isTRUE(p3d),
+      plot = FALSE
+    )
+    score_column <- setdiff(names(scores), c("marker", "chrom", "pos"))
+    if (length(score_column) != 1L) {
+      stop("rrBLUP returned an unexpected number of trait columns")
+    }
+    score <- as.numeric(scores[[score_column]])
+    beta <- se <- rep(NA_real_, length(score))
+    h2_null <- NA_real_
+  } else {
+    covariates <- if (length(fixed_effects)) {
+      stats::model.matrix(stats::reformulate(fixed_effects), data = pheno)[, -1L, drop = FALSE]
+    } else {
+      NULL
+    }
+    native <- .bioana_gwas_native(rr_dosage, as.numeric(pheno[[trait]]), covariates,
+                                  kinship, as.integer(n_pcs), min_maf)
+    scores <- data.frame(marker = variants$id[native$index], chrom = variants$seqname[native$index],
+                         pos = variants$pos[native$index], stringsAsFactors = FALSE)
+    score <- -log10(native$p_value)
+    beta <- native$beta
+    se <- native$se
+    h2_null <- native$h2
   }
-  score <- as.numeric(scores[[score_column]])
   p_value <- pmin(1, 10^(-score))
   q_value <- stats::p.adjust(p_value, method = "BH")
   allele_frequency <- rowMeans(dosage, na.rm = TRUE) / 2
@@ -132,6 +160,8 @@ analyze_gwas <- function(
     seqname = as.character(scores$chrom),
     pos = as.numeric(scores$pos),
     score = score,
+    beta = beta,
+    se = se,
     p_value = p_value,
     q_value = q_value,
     maf = maf[match(as.character(scores$marker), variants$id)],
@@ -152,7 +182,7 @@ analyze_gwas <- function(
     row.names = FALSE
   )
   summary <- list(
-    backend = "rrBLUP::GWAS",
+    backend = if (backend == "rrBLUP") "rrBLUP::GWAS" else "native EMMAX (P3D)",
     trait = trait,
     samples = sum(observed),
     markers_tested = nrow(result),
@@ -161,7 +191,8 @@ analyze_gwas <- function(
     minimum_maf = min_maf,
     p3d = isTRUE(p3d),
     fdr_threshold = fdr_threshold,
-    discoveries = sum(result$significant, na.rm = TRUE)
+    discoveries = sum(result$significant, na.rm = TRUE),
+    null_model_h2 = h2_null
   )
   .bioana_write_json(summary, summary_path)
   invisible(list(
@@ -362,6 +393,12 @@ analyze_binary_gwas <- function(
 #' @param fdr_threshold Discovery threshold applied to `q_value`.
 #' @param window_bp Non-negative distance around each causal variant. A value of
 #'   zero requires an exact marker or coordinate match.
+#' @param ld_r2 Optional r2 threshold. With `genotypes`, a marker on the same
+#'   chromosome whose r2 with a causal marker is at least `ld_r2` also counts as
+#'   hitting it (for crosses, where linked markers carry the same signal).
+#'   `NULL` (default) uses `window_bp` only.
+#' @param genotypes Genotype file (VCF or TSV) or a marker-by-sample dosage
+#'   matrix with marker IDs as row names; needed with `ld_r2`.
 #'
 #' @return Invisibly returns annotated associations, metrics, and output paths.
 #' @examples
@@ -378,7 +415,9 @@ benchmark_gwas <- function(
     truth,
     out_prefix,
     fdr_threshold = 0.05,
-    window_bp = 0L) {
+    window_bp = 0L,
+    ld_r2 = NULL,
+    genotypes = NULL) {
   results <- .bioana_read_analysis_table(gwas_results, "GWAS result")
   truth <- .bioana_read_analysis_table(truth, "GWAS truth")
   required_results <- c("marker_id", "seqname", "pos", "q_value")
@@ -396,23 +435,22 @@ benchmark_gwas <- function(
   }
 
   exact <- results$marker_id %in% truth$marker_id
-  near <- vapply(seq_len(nrow(results)), function(i) {
-    same_chromosome <- as.character(truth$seqname) ==
-      as.character(results$seqname[i])
-    any(same_chromosome &
-      abs(as.numeric(truth$pos) - as.numeric(results$pos[i])) <= window_bp)
-  }, logical(1L))
+  # linked[i, j]: result marker i hits causal variant j (same chromosome, within window_bp or r2 >= ld_r2)
+  linked <- outer(as.character(results$seqname), as.character(truth$seqname), "==") &
+    abs(outer(as.numeric(results$pos), as.numeric(truth$pos), "-")) <= window_bp
+  if (!is.null(ld_r2)) {
+    if (is.null(genotypes)) stop("ld_r2 needs genotypes")
+    dosage <- if (is.matrix(genotypes)) genotypes else .bioana_read_genotypes(genotypes)$genotype
+    r2 <- .bioana_ld_r2(dosage, as.character(results$marker_id), as.character(truth$marker_id))
+    linked <- linked | (r2 >= ld_r2 & outer(as.character(results$seqname), as.character(truth$seqname), "=="))
+  }
+  near <- rowSums(linked) > 0
   results$is_causal <- exact
   results$within_causal_window <- near
   results$discovery <- !is.na(results$q_value) &
     results$q_value <= fdr_threshold
 
-  recovered_truth <- vapply(seq_len(nrow(truth)), function(i) {
-    same_chromosome <- as.character(results$seqname) ==
-      as.character(truth$seqname[i])
-    any(results$discovery & same_chromosome &
-      abs(as.numeric(results$pos) - as.numeric(truth$pos[i])) <= window_bp)
-  }, logical(1L))
+  recovered_truth <- colSums(linked & results$discovery) > 0
   true_positive <- sum(results$discovery & near)
   false_positive <- sum(results$discovery & !near)
   false_negative <- sum(!recovered_truth)
@@ -430,6 +468,7 @@ benchmark_gwas <- function(
   metrics <- data.frame(
     fdr_threshold = fdr_threshold,
     window_bp = window_bp,
+    ld_r2 = ld_r2 %||% NA_real_,
     causal_variants = nrow(truth),
     discoveries = sum(results$discovery),
     true_positive_markers = true_positive,
@@ -678,4 +717,87 @@ plot_gwas_results <- function(
     stop(label, " must be a data frame or a tab-separated file path")
   }
   as.data.frame(data, check.names = FALSE, stringsAsFactors = FALSE)
+}
+
+# Additive relationship matrix from -1/0/1 dosages (markers x samples), as rrBLUP::A.mat
+# without its marker filters: W = allele count - 2p, A = W W' / (2 sum p(1 - p)).
+.bioana_kinship <- function(rr_dosage) {
+  counts <- t(rr_dosage) + 1
+  freq <- colMeans(counts, na.rm = TRUE) / 2
+  w <- sweep(counts, 2L, 2 * freq)
+  w[is.na(w)] <- 0
+  keep <- freq > 0 & freq < 1
+  tcrossprod(w[, keep, drop = FALSE]) / (2 * sum(freq[keep] * (1 - freq[keep])))
+}
+
+# EMMAX with P3D: y = X b + g + e, var(y) = s2 (K + delta I). delta by REML on the
+# eigenbasis of K, then GLS of y on X and each marker. Markers are -1/0/1 dosages
+# (markers x samples, missing imputed with the marker mean). Returns the tested
+# marker indices with beta (per alternative allele), se and p.
+.bioana_gwas_native <- function(rr_dosage, y, covariates, kinship, n_pcs = 0L, min_maf = 0.05, chunk = 5000L) {
+  n <- length(y)
+  eig <- eigen(kinship, symmetric = TRUE)
+  X <- matrix(1, n, 1L)
+  if (!is.null(covariates) && ncol(covariates)) X <- cbind(X, covariates)
+  if (n_pcs > 0L) X <- cbind(X, eig$vectors[, seq_len(min(n_pcs, n - ncol(X) - 2L)), drop = FALSE])
+  qx <- qr(X)
+  X <- X[, qx$pivot[seq_len(qx$rank)], drop = FALSE]
+  p <- ncol(X)
+  if (n - p - 1L < 2L) stop("Too few lines for the covariates in the GWAS model")
+  d <- pmax(eig$values, 0)
+  U <- eig$vectors
+  ys <- drop(crossprod(U, y))
+  Xs <- crossprod(U, X)
+  reml <- function(log_delta) {
+    w <- 1 / (d + exp(log_delta))
+    xtwx <- crossprod(Xs, Xs * w)
+    b <- solve(xtwx, crossprod(Xs, w * ys))
+    r <- ys - drop(Xs %*% b)
+    s2 <- sum(w * r^2) / (n - p)
+    -0.5 * ((n - p) * log(s2) + sum(log(d + exp(log_delta))) + as.numeric(determinant(xtwx)$modulus))
+  }
+  delta <- exp(stats::optimize(reml, c(-10, 10), maximum = TRUE)$maximum)
+  w <- 1 / (d + delta)
+  xtwx_inv <- solve(crossprod(Xs, Xs * w))
+  resid_w <- function(m) m - Xs %*% (xtwx_inv %*% crossprod(Xs, w * m))
+  yr <- drop(resid_w(ys))
+  ywy <- sum(w * yr^2)
+  counts <- rr_dosage + 1
+  freq <- rowMeans(counts, na.rm = TRUE) / 2
+  tested <- which(is.finite(freq) & pmin(freq, 1 - freq) >= min_maf)
+  if (!length(tested)) stop("No markers meet min_maf among the phenotyped samples")
+  df <- n - p - 1L
+  beta <- se <- p_value <- rep(NA_real_, length(tested))
+  for (start in seq(1L, length(tested), by = chunk)) {
+    k <- seq.int(start, min(start + chunk - 1L, length(tested)))
+    z <- rr_dosage[tested[k], , drop = FALSE]
+    miss <- is.na(z)
+    if (any(miss)) z[miss] <- (2 * freq[tested[k]] - 1)[row(z)[miss]]
+    zr <- resid_w(crossprod(U, t(z)))
+    zwz <- colSums(w * zr^2)
+    zwy <- colSums(w * zr * yr)
+    ok <- zwz > 1e-8 * max(zwz)
+    b <- zwy / zwz
+    s2 <- (ywy - b * zwy) / df
+    s <- sqrt(s2 / zwz)
+    beta[k] <- ifelse(ok, b, NA_real_)
+    se[k] <- ifelse(ok, s, NA_real_)
+    p_value[k] <- ifelse(ok, 2 * stats::pt(-abs(b / s), df), NA_real_)
+  }
+  list(index = tested, beta = beta, se = se, p_value = p_value,
+       h2 = mean(d) / (mean(d) + delta))
+}
+
+# r2 between result markers (rows) and truth markers (columns); NA-safe, 0 when a marker is missing or monomorphic.
+.bioana_ld_r2 <- function(dosage, result_ids, truth_ids) {
+  out <- matrix(0, length(result_ids), length(truth_ids))
+  tr <- match(truth_ids, rownames(dosage))
+  rs <- match(result_ids, rownames(dosage))
+  ok_t <- which(!is.na(tr)); ok_r <- which(!is.na(rs))
+  if (!length(ok_t) || !length(ok_r)) return(out)
+  r <- suppressWarnings(stats::cor(t(dosage[rs[ok_r], , drop = FALSE]), t(dosage[tr[ok_t], , drop = FALSE]),
+                                   use = "pairwise.complete.obs"))
+  r[is.na(r)] <- 0
+  out[ok_r, ok_t] <- r^2
+  out
 }

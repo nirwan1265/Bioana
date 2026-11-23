@@ -51,7 +51,10 @@ Rules that hold across the suite:
 `bioana_write_manifest()`): `data` = list of entries with `id`, `data_type`
 (a row of `inst/rules/analyses.tsv`), `assay`, `files` (named, relative
 paths) and optional `truth` (`kind` features / regions / outcome / qtn,
-`file`, `term` = the model term the conditions belong to, `large`). Without a
+`file`, `term` = the model term the conditions belong to, `large`).
+A `genotypes` entry may carry `genotype_term` (the model term that holds the
+lines); without it Bioana reads `sim_truth.json` `genetics.genotype_term`,
+then matches `inst/rules/genetics.json` `genotype_pattern`. Without a
 manifest, `bioana_manifest()` infers the outcome and `counts.tsv`.
 
 **Data files**: every feature x sample matrix has the feature id in the first
@@ -75,6 +78,7 @@ model-matrix column names (`treatmenttreatment_2`).
 | `R/linear_test.R` | the shared feature engine: per-feature linear model with the design's fixed terms, empirical-Bayes moderated t (limma's squeezeVar, native), BH; truth scoring by feature or by region overlap |
 | `R/method_outcome.R` | primary outcome by type (lm/lmer, glm/glmer, glm.nb, clm/clmm, coxph) and its truth scoring |
 | `R/method_features.R` | each feature data type: builds the matrix on a testable scale, then the engine |
+| `R/method_genotypes.R` | `genotypes`: genotype term, line means (BLUEs) from the design's model, GWAS, QTN scoring (exact marker or LD) |
 | `R/gwas.R`, `R/genomic_selection.R` | GWAS (rrBLUP mixed model, binary traits, truth benchmark, Manhattan/QQ) and genomic prediction / selection (moved from Simitall) |
 | `R/rnaseq_eqtl.R`, `R/scrnaseq.R` | eQTL benchmarks, RNA-seq results summary and figure; single-cell clustering, condition tests, cell-type eQTL benchmark and figure (moved) |
 | `R/peaks.R` | windowed peak calling, differential peaks, scoring against truth peaks, ChIP results figure (moved) |
@@ -82,6 +86,7 @@ model-matrix column names (`treatmenttreatment_2`).
 | `R/assembly.R`, `R/plot_panels.R`, `R/globals.R` | Unicycler / QUAST evaluation; saving figure panels; ggplot column names (moved) |
 | `inst/rules/analyses.tsv` | data_type -> method, status, files needed, assays, note |
 | `inst/rules/method_parameters.tsv` | settings per data type (window sizes, filters) |
+| `inst/rules/genetics.json` | genotype term pattern (**a copy of Simitall's `inst/suite/genetics.json` pattern: change both**), QTN types scored, cross mating schemes |
 | `inst/rules/handoff.json`, `model_terms.json` | Biodes contract (supported handoff versions, model-term vocabulary); copies of Simitall's |
 | `tests/testthat/` | `test-analyze.R`: synthetic data in a fixture RCBD folder (no Biodes or Simitall needed); `test-gwas-selection.R`, `test-legacy-analyses.R`: the tests moved with the functions, which simulate with Simitall (skipped without it) |
 
@@ -105,6 +110,23 @@ DMR windows (FDR 0.06); m6A 2/40 (5 per group is little power for m6A);
 small RNA and microbiome 0 found (the real templates vary a lot between
 samples: signs right, r 0.75 and 0.42, but 5 per group is not enough).
 
+## Genotypes (v0.3, 2026-11-23)
+
+`genotypes` runs in `bioana_analyze()`. Line means: the outcome fitted with
+`analysis.model` (genotype term fixed; refitted as fixed if random), each
+line's fixed-effect prediction averaged over the other fixed factors. Scan:
+`analyze_gwas()`, rrBLUP when installed, else the native EMMAX scan (also
+gives per-marker effects). `n_pcs = auto`: 0 for crosses, 3 for panels.
+Truth: additive and dominance QTN count in tpr; `gxe_slope` rows dropped;
+epistatic QTN are not false positives but not in tpr; a hit counts when it is
+the QTN marker or has r2 >= `ld_r2` (0.5) with it.
+
+**Contract change for Simitall** (`R/suite_manifest.R`): add
+`genotype_term = truth$genetics$genotype_term` to the `genotypes` manifest
+entry. Bioana already falls back to `sim_truth.json`, so nothing breaks
+before then. Simitall's power sweep can read `analyses$<id>$recovery$tpr`
+for genotypes (same name as the feature types).
+
 ## Moved from Simitall (2026-11-23)
 
 All of Simitall's analysis code now lives here: GWAS, genomic selection,
@@ -121,7 +143,7 @@ aggregation), and calls `bioana::bioana_analyze()` for its power sweep and
 ## Next
 
 The checklist is "Future analyses to check" in README.md. In short: wire the
-moved functions into `bioana_analyze()` (genotypes/GWAS, eQTL, single cell,
+moved functions into `bioana_analyze()` (eQTL, single cell,
 peak calling, genomic prediction), add analyses for the data types Simitall
 will simulate (metabolomics, BSA/pool-seq, Ribo-seq, scATAC, Hi-C, degradome,
 spatial, CRISPR screens, repertoires, proteomics, reporter assays), package

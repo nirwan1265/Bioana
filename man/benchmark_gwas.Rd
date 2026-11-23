@@ -9,7 +9,9 @@ benchmark_gwas(
   truth,
   out_prefix,
   fdr_threshold = 0.05,
-  window_bp = 0L
+  window_bp = 0L,
+  ld_r2 = NULL,
+  genotypes = NULL
 )
 }
 \arguments{
@@ -23,6 +25,14 @@ benchmark_gwas(
 
 \item{window_bp}{Non-negative distance around each causal variant. A value of
 zero requires an exact marker or coordinate match.}
+
+\item{ld_r2}{Optional r2 threshold. With \code{genotypes}, a marker on the same
+chromosome whose r2 with a causal marker is at least \code{ld_r2} also counts as
+hitting it (for crosses, where linked markers carry the same signal).
+\code{NULL} (default) uses \code{window_bp} only.}
+
+\item{genotypes}{Genotype file (VCF or TSV) or a marker-by-sample dosage
+matrix with marker IDs as row names; needed with \code{ld_r2}.}
 }
 \value{
 Invisibly returns annotated associations, metrics, and output paths.

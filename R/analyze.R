@@ -81,13 +81,18 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     a <- s$analyses[[id]]
     line <- if (a$data_type == "outcome") {
       sprintf("%s outcome, %s", a$outcome_type, a$method)
+    } else if (a$data_type == "genotypes") {
+      sprintf("%d lines x %d markers tested, %d significant", a$n_lines, a$n_features_tested, a$significant$markers)
     } else {
       sig <- unlist(a$significant)
       sprintf("%d features tested, %s significant", a$n_features_tested %||% 0L,
               if (length(sig)) paste(paste0(names(sig), " ", sig), collapse = ", ") else "0")
     }
     rec <- a$recovery
-    rtxt <- if (is.null(rec)) "" else if (a$data_type == "outcome") {
+    rtxt <- if (is.null(rec)) "" else if (a$data_type == "genotypes") {
+      sprintf("; truth: %d/%d QTN found (FDR %s), sign %s, line means r %s", rec$true_positives, rec$testable,
+              rec$fdr, rec$sign_agreement, a$line_mean_cor %||% "NA")
+    } else if (a$data_type == "outcome") {
       if (!is.null(rec$coverage)) sprintf("; truth: %d/%d coefficients in their CI", rec$covered, rec$n_terms) else
         sprintf("; truth: sign %s, detected %s", rec$sign_agreement, rec$detected)
     } else {

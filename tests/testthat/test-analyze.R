@@ -109,8 +109,8 @@ test_that("a folder without a manifest is inferred; unknown and planned data typ
   expect_error(bioana_write_manifest(d, list(id = "x", data_type = "feature_counts", files = list())), "needs files: counts")
   jsonlite::write_json(list(manifest_version = "0.1", data = list(
     list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome"),
-    list(id = "geno", data_type = "genotypes", files = list(vcf = "g.vcf")))), file.path(d, "data_manifest.json"), auto_unbox = TRUE)
+    list(id = "cells", data_type = "single_cell_counts", files = list(counts = "c.tsv", cells = "cells.tsv")))), file.path(d, "data_manifest.json"), auto_unbox = TRUE)
   utils::capture.output(r <- bioana_analyze(d))
-  expect_equal(r$summary$not_analysed$geno$status, "planned")
+  expect_equal(r$summary$not_analysed$cells$status, "planned")
   expect_true("outcome" %in% names(r$summary$analyses))
 })

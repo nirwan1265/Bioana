@@ -1,3 +1,19 @@
+# bioana 0.3.0
+
+- `genotypes` is ready in `bioana_analyze()`: line means (BLUEs) of the
+  primary outcome per level of the genotype term, from the design's
+  `analysis.model`, then a kinship mixed-model GWAS on the VCF. Simulated
+  folders are scored against `qtn_truth.tsv` (tpr, fdr, sign, estimate r) and
+  the line means against the true genetic values. Writes
+  `bioana/<id>/results.tsv`, `line_means.tsv`, `qtn_recovery.tsv`.
+- `analyze_gwas(backend = )`: `"native"` EMMAX scan (same model as rrBLUP with
+  `P3D = TRUE`) when rrBLUP is not installed; it also returns per-marker `beta`
+  and `se`. The `.gwas.tsv` table gains `beta` and `se` columns (NA with rrBLUP).
+- `benchmark_gwas(ld_r2 = , genotypes = )`: a hit in LD with a causal marker
+  counts (for crosses); `ld_r2` is added to the metrics table.
+- New rules: `inst/rules/genetics.json` (genotype term pattern, QTN types
+  scored, cross mating schemes) and `genotypes` rows in `method_parameters.tsv`.
+
 # bioana 0.2.0
 
 - All of Simitall's analysis functions moved here: GWAS (`analyze_gwas()`,

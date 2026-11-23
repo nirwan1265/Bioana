@@ -1,0 +1,8 @@
+{
+  "_about": "Genetics rules for the genotypes data type. genotype_pattern finds the model term that holds the lines when neither the manifest entry (genotype_term) nor sim_truth.json (genetics.genotype_term) names it: a treatment term whose analysis.terms meaning, own name, layout column or (for treatment) first spec factor name matches it. A copy of genotype_pattern in Simitall's inst/suite/genetics.json: change both together.",
+  "genotype_pattern": "^(genotype|genotypes|line|lines|accession|accessions|variety|varieties|cultivar|cultivars|hybrid|hybrids|inbred|inbreds|entry|entries|strain|strains|ril|rils|nil|nils|dh|dhs|family|families|clone|clones|germplasm)$",
+  "target_qtn_types": ["additive", "dominance"],
+  "_note_qtn_types": "QTN types counted in tpr. gxe_slope rows repeat additive markers and are dropped; epistatic QTN have no marginal effect on average, so a hit on one is not a false positive but they are not in the tpr denominator.",
+  "cross_mating": ["ril", "dh", "nam", "backcross", "selfing", "biparental", "f2", "magic", "sib_mating"],
+  "_note_cross_mating": "population.mating values that mean the lines come from a cross; n_pcs = auto fits no principal components for them (Simitall's genetics_cross route uses the same list)."
+}

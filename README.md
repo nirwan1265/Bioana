@@ -70,7 +70,7 @@ bioana_analyze("~/biodes_runs/my_design")
 | `bisulfite_counts` | sites, methylated, coverage | WGBS, RRBS, EM-seq | sites pooled in windows per context, M-values, moderated t |
 | `methylation_beta` | beta | 450k / EPIC arrays | M-values, moderated t per probe |
 | `ip_input_counts` | ip, input | m6A MeRIP-seq, MeDIP, RIP | log2(IP/input) per window, so expression changes cancel |
-| `genotypes` | vcf | GWAS, QTL mapping | planned in `bioana_analyze()`; `analyze_gwas()` works directly |
+| `genotypes` | vcf | GWAS, GBS, WGS, QTL mapping | line means (BLUEs) of the primary outcome per line from the design's `analysis.model`, then a kinship mixed-model GWAS (rrBLUP, or native EMMAX without it); scored against `qtn_truth.tsv` by exact marker or LD |
 | `single_cell_counts` | counts, cells | scRNA-seq (cell level) | planned in `bioana_analyze()`; `cluster_scrnaseq()` works directly |
 
 Settings per data type: `inst/rules/method_parameters.tsv`, overridden with
@@ -105,6 +105,10 @@ fit <- bioana::fit_genomic_model("cohort.geno.tsv", phenotypes, trait = "yield",
 - `<id>/results.tsv` — outcome: one row per coefficient (`term, estimate, se, df, statistic, p, role, padj`);
   features: one row per feature and treatment contrast (`feature_id, contrast, estimate, se, t, p, padj`).
 - `<id>/recovery.tsv` — outcome only, simulated data: true vs estimated coefficients.
+- genotypes: `<id>/results.tsv` one row per tested marker (`marker_id, seqname, pos, estimate, se, p, padj, maf, significant`;
+  `estimate` = effect per alternative allele, on the outcome scale); `<id>/line_means.tsv` (`line, mean, se, n_units`);
+  `<id>/qtn_recovery.tsv`, simulated data: one row per QTN (`marker_id, seqname, pos, type, effect, maf, tested, recovered,
+  estimate, se, p, padj`); `<id>/gwas.gwas.tsv` is `analyze_gwas()`'s own table, for `plot_gwas_results()`.
 - `bioana_summary.json` — per data set: method, model fitted, counts tested and significant,
   warnings, and the truth scores (`tpr`, `fdr`, `sign_agreement`, `estimate_cor`, CI coverage).
 
@@ -141,8 +145,10 @@ many of Biodes' 4,695 paper questions need it.
 
 **Wire existing functions into `bioana_analyze()`**
 
-- [ ] `genotypes`: GWAS / QTL mapping with `analyze_gwas()` on the design's
+- [x] `genotypes`: GWAS / QTL mapping with `analyze_gwas()` on the design's
       line means, scored with `benchmark_gwas()` against `genetic_truth/qtn_truth.tsv`.
+      Next for it: GWAS per environment under GxE, ordinal and survival outcomes,
+      QTL mapping with cross-aware genotype probabilities.
 - [ ] eQTL designs: `benchmark_eqtl()` on `counts.tsv` + `genotypes.vcf`.
 - [ ] Single cell at cell level: `cluster_scrnaseq()`, cell-type proportions,
       `test_scrnaseq_conditions()`; cell-type eQTL.
@@ -193,7 +199,7 @@ many of Biodes' 4,695 paper questions need it.
 
 ## Status
 
-Version 0.2: `bioana_analyze()` for the data types in the first table, and
+Version 0.3: `bioana_analyze()` for the data types in the first table, and
 all of Simitall's former analysis functions (second table), tested on
 synthetic folders and on Simitall output (`devtools::test()`; the moved tests
 run when Simitall is installed). See `AGENTS.md` for how the code is organised.

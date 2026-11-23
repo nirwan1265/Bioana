@@ -16,7 +16,8 @@ analyze_gwas(
   min_maf = 0.05,
   n_cores = 1L,
   p3d = TRUE,
-  fdr_threshold = 0.05
+  fdr_threshold = 0.05,
+  backend = c("auto", "rrBLUP", "native")
 )
 }
 \arguments{
@@ -47,6 +48,13 @@ effects.}
 faster than marker-specific REML but can be less significant.}
 
 \item{fdr_threshold}{BH-adjusted p-value threshold used to label discoveries.}
+
+\item{backend}{\code{"auto"} (rrBLUP when installed, else native), \code{"rrBLUP"}, or
+\code{"native"}: the same model (kinship random effect, PCs and \code{fixed_effects}
+as fixed covariates, variance components estimated once by REML, as
+EMMAX / rrBLUP with \code{P3D = TRUE}), then GLS per marker. The native scan
+also returns each marker's effect (\code{beta}, \code{se}, per alternative allele);
+rrBLUP returns only the score. \code{p3d = FALSE} needs rrBLUP.}
 }
 \value{
 Invisibly returns a list containing the GWAS table, kinship matrix,
