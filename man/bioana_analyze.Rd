@@ -10,7 +10,8 @@ bioana_analyze(
   alpha = 0.05,
   params = NULL,
   only = NULL,
-  quiet = FALSE
+  quiet = FALSE,
+  secondary = NA
 )
 }
 \arguments{
@@ -27,6 +28,14 @@ see \code{inst/rules/method_parameters.tsv}.}
 \item{only}{Optional ids or data types to run.}
 
 \item{quiet}{\code{TRUE} skips the one-line-per-data-set report.}
+
+\item{secondary}{Run the secondary engine (the next gold-standard package in
+\code{inst/rules/engine_selection.tsv}) as well, and report how well it agrees
+with the primary: \code{TRUE}, \code{FALSE}, or \code{NA} (default) to ask when the
+session is interactive and \code{quiet = FALSE} (no otherwise). Its results go
+to \verb{<outdir>/<id>/results_<engine>.tsv}. Pick an engine per data type with
+\code{params}, e.g. \code{list(feature_counts = list(engine = "edger"))}; see
+\code{\link[=bioana_engines]{bioana_engines()}} and \code{\link[=bioana_engine_plan]{bioana_engine_plan()}}.}
 }
 \value{
 Invisibly, a list: \code{summary} (per data set, as in \code{bioana_summary.json}),

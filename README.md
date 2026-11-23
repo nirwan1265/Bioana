@@ -57,6 +57,42 @@ bioana_write_manifest("~/biodes_runs/my_design",
 bioana_analyze("~/biodes_runs/my_design")
 ```
 
+## Which packages it runs (gold standards, not home-made statistics)
+
+Every analysis calls a published package, chosen by two rule tables:
+`inst/rules/engines.tsv` (package, function, model, test statistic, multiple
+testing, assumptions, reference) and `inst/rules/engine_selection.tsv` (engine
+order per data type and per design: `fixed` = no random terms in
+`analysis.model`, `random` = repeated or nested units).
+
+| data | fixed design | random terms (same individuals over time, split plots, ...) |
+|---|---|---|
+| gene / miRNA / taxon counts | DESeq2 → edgeR → limma-voom | dream → limma-voom + duplicateCorrelation |
+| ChIP peaks, ATAC windows | edgeR (as csaw) → DESeq2 | dream → limma-voom |
+| bisulfite counts | DSS (beta-binomial) → limma on M-values | limma on M-values |
+| methylation arrays | limma on M-values | limma + duplicateCorrelation |
+| m6A / MeDIP / RIP | edgeR IP x treatment interaction → limma on log2(IP/input) | limma |
+| primary outcome | lm, glm, glm.nb, clm, coxph → glmmTMB | lmerTest, glmer, glmer.nb, clmm → glmmTMB |
+| genotypes (GWAS on line means) | rrBLUP → GAPIT MLM | (kinship random effect) |
+
+The first installed engine is the **primary**; the next is the **secondary**.
+`bioana_analyze(dir, secondary = TRUE)` runs both and reports how well they
+agree (in an interactive session Bioana asks). Bioana's own code is a
+**fallback only**, marked `FALLBACK` in the report. Every data set's
+`engine` block in `bioana_summary.json` records package, version, exact call,
+formula, model, input, assumptions, test statistic, multiple testing,
+experimental unit and whether a fallback was used.
+
+```r
+bioana_engines()                                  # the registry, with what is installed
+bioana_engine_plan("feature_counts", "random")    # what would run for a repeated-measures RNA-seq design
+bioana_analyze(dir, params = list(feature_counts = list(engine = "edger")))   # choose an engine
+```
+
+Tutorials (each package's own example code, then the same through Bioana) and
+the gold-standard checks (Bioana's adapter must give the same numbers as the
+package called directly) are in [docs/engines/](docs/engines/README.md).
+
 ## What it analyses
 
 `bioana_analyses()` prints `inst/rules/analyses.tsv`:
@@ -103,14 +139,18 @@ fit <- bioana::fit_genomic_model("cohort.geno.tsv", phenotypes, trait = "yield",
 `<folder>/bioana/`:
 
 - `<id>/results.tsv` — outcome: one row per coefficient (`term, estimate, se, df, statistic, p, role, padj`);
-  features: one row per feature and treatment contrast (`feature_id, contrast, estimate, se, t, p, padj`).
+  features: one row per feature and treatment contrast (`feature_id, contrast, estimate, se, statistic, p, padj`;
+  `statistic` is the engine's test statistic: Wald z for DESeq2, QL F for edgeR, moderated t for limma/dream).
+- `<id>/results_<engine>.tsv` — the secondary engine's table, when `secondary = TRUE`.
 - `<id>/recovery.tsv` — outcome only, simulated data: true vs estimated coefficients.
 - genotypes: `<id>/results.tsv` one row per tested marker (`marker_id, seqname, pos, estimate, se, p, padj, maf, significant`;
   `estimate` = effect per alternative allele, on the outcome scale); `<id>/line_means.tsv` (`line, mean, se, n_units`);
   `<id>/qtn_recovery.tsv`, simulated data: one row per QTN (`marker_id, seqname, pos, type, effect, maf, tested, recovered,
   estimate, se, p, padj`); `<id>/gwas.gwas.tsv` is `analyze_gwas()`'s own table, for `plot_gwas_results()`.
 - `bioana_summary.json` — per data set: method, model fitted, counts tested and significant,
-  warnings, and the truth scores (`tpr`, `fdr`, `sign_agreement`, `estimate_cor`, CI coverage).
+  warnings, the truth scores (`tpr`, `fdr`, `sign_agreement`, `estimate_cor`, CI coverage), the `engine`
+  provenance block, `secondary_engine`, and with `secondary = TRUE` the secondary's provenance,
+  `concordance` (estimate r, sign agreement, significant in both / one only, Jaccard) and truth scores.
 
 ## The link to Simitall: `data_manifest.json`
 
@@ -181,12 +221,15 @@ many of Biodes' 4,695 paper questions need it.
 
 **Methods and checks**
 
-- [ ] Package adapters when installed, with the native methods as fallback:
-      DESeq2 / edgeR / limma-voom (counts), DSS / methylKit (methylation),
-      ANCOM-BC / ALDEx2 (microbiome, compositional), exomePeak2 (m6A),
-      csaw / DiffBind (peaks).
-- [ ] Random terms in feature tests (block or subject correlation, as limma
-      duplicateCorrelation / dream); the feature engine now uses fixed terms only.
+- [x] Package adapters with the native methods as fallback: DESeq2, edgeR,
+      limma-voom, limma, dream, DSS, glmmTMB, rrBLUP, GAPIT (engine registry,
+      selection rules, provenance, tutorials and gold checks).
+- [ ] Next adapters: qtl2, muscat, csaw / DiffBind, ANCOM-BC2 / ALDEx2,
+      exomePeak2 (BAM), methylKit, MSstats / proDA, clusterProfiler / fgsea,
+      mixOmics; then Python engines (Scanpy/scVI-tools, PyDESeq2, statsmodels,
+      scikit-learn, COBRApy).
+- [x] Random terms in feature tests: dream (any lme4 terms) or limma
+      duplicateCorrelation (one grouping term).
 - [ ] Contrasts beyond "each level vs the reference": pairwise and interaction
       contrasts for multi-level factors.
 - [ ] Power for every data type: Simitall's power sweep uses Bioana's scores
@@ -199,7 +242,7 @@ many of Biodes' 4,695 paper questions need it.
 
 ## Status
 
-Version 0.3: `bioana_analyze()` for the data types in the first table, and
+Version 0.4: `bioana_analyze()` for the data types in the first table, and
 all of Simitall's former analysis functions (second table), tested on
 synthetic folders and on Simitall output (`devtools::test()`; the moved tests
 run when Simitall is installed). See `AGENTS.md` for how the code is organised.

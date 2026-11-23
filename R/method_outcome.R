@@ -44,7 +44,13 @@
   if (type == "survival") frame$event_ <- dat$event_
   has_random <- length(.ba_findbars(f)) > 0
   fixed_f <- .ba_nobars(f)
-  fit <- switch(type,
+  ch <- .ba_engine_chain(paste0("outcome:", type), design, NULL, args$engine)
+  if (!length(ch$chain)) stop("No outcome engine installed: ", paste(names(ch$skipped), unlist(ch$skipped), collapse = "; "), call. = FALSE)
+  eng <- ch$chain[1]
+  fit <- if (identical(eng, "glmmtmb")) {
+    if (!type %in% c("continuous", "binary", "count")) stop(sprintf("glmmTMB is set up for continuous, binary and count outcomes, not %s.", type), call. = FALSE)
+    glmmTMB::glmmTMB(f, data = frame, family = switch(type, continuous = stats::gaussian(), binary = stats::binomial(), count = glmmTMB::nbinom2()))
+  } else switch(type,
     continuous = {
       n_fixed <- ncol(stats::model.matrix(stats::reformulate(c("1", p$fixed_labels)), data = frame))
       max_sat <- .ba_rules("handoff")$satterthwaite_max_fixed_coefficients %||% Inf
@@ -74,6 +80,11 @@
       survival::coxph(sf, data = frame)
     },
     stop(sprintf("No outcome analysis for type '%s'.", type), call. = FALSE))
+  if (!identical(eng, "glmmtmb")) {
+    # the engine the rules name for this type and design is the one the switch above fitted
+    eng <- .ba_selection_rows(paste0("outcome:", type), if (has_random) "random" else "fixed")$engine[1]
+    if (inherits(fit, "polr")) warn <- c(warn, "ordinal not installed: MASS::polr fitted instead of ordinal::clm")
+  }
   if (has_random && inherits(fit, "merMod") && lme4::isSingular(fit)) warn <- c(warn, "singular fit: a random-effect variance was estimated as ~0")
   res <- .ba_coef_table(fit, type, frame, p)
   res$role <- vapply(res$term, function(t) .ba_coef_role(t, p), "")
@@ -92,6 +103,10 @@
                   model_fitted = if (type == "survival") paste(deparse(stats::formula(fit)), collapse = "") else paste(deparse(stats::formula(fit)), collapse = ""),
                   n_rows = nrow(meta), n_units_fitted = nrow(frame), subsamples = if (has_subs) subsamples else "none",
                   dropped_samples = meta$sample_id[is.na(y)],
+                  engine = .ba_provenance(eng, design, tryCatch(paste(deparse(stats::getCall(fit)), collapse = " "), error = function(e) class(fit)[1]),
+                                          sprintf("%s outcome '%s', %d units", type, col, nrow(frame)), nrow(frame), ch,
+                                          formula = paste(deparse(f), collapse = "")),
+                  secondary_engine = .ba_secondary_engine(ch$chain, eng),
                   anova = if (is.null(aov)) NULL else lapply(split(cbind(term = rownames(aov), aov), seq_len(nrow(aov))), as.list),
                   warnings = warn)
   truth <- .ba_entry_truth(entry, design$dir)
@@ -124,6 +139,7 @@
                       stringsAsFactors = FALSE, row.names = NULL))
   }
   co <- summary(fit)$coefficients
+  if (inherits(fit, "glmmTMB")) co <- co$cond
   pcol <- grep("^Pr\\(", colnames(co), value = TRUE)
   dfv <- if ("df" %in% colnames(co)) co[, "df"] else if (inherits(fit, "lm") && !inherits(fit, "glm")) rep(stats::df.residual(fit), nrow(co)) else
     if (inherits(fit, "glm")) rep(Inf, nrow(co)) else rep(max(1, nrow(frame) - nrow(co)), nrow(co))

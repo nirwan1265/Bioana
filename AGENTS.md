@@ -30,6 +30,11 @@ Rules that hold across the suite:
 - Biodes decides the experimental unit, blocks and random terms
   (`analysis.model`). Bioana fits that model; it refuses to treat
   subsamples as independent replicates.
+- Statistics come from published packages (the engines in
+  `inst/rules/engines.tsv`, ordered per data type and design in
+  `engine_selection.tsv`). Native Bioana code is the last fallback only.
+  Every adapter has a gold check in `tests/testthat/test-engines.R`: the
+  adapter must give the same numbers as the package called directly.
 
 ## Inputs
 
@@ -75,6 +80,10 @@ model-matrix column names (`treatmenttreatment_2`).
 | `R/analyze.R` | `bioana_analyze()`: read design + manifest, run each data set's method from `analyses.tsv`, write the summary, print one line per data set |
 | `R/manifest.R` | `bioana_manifest()`, `bioana_write_manifest()`, `bioana_analyses()`, truth loading |
 | `R/read_design.R` | reads and checks the Biodes folder, parses `analysis.model` into roles and columns. **A copy of Simitall's `R/suite_handoff.R` (`.suite_` -> `.ba_`): change both together** |
+| `R/engines.R` | engine registry and selection (`bioana_engines()`, `bioana_engine_plan()`), feature design, the engine chain, provenance, secondary-engine concordance |
+| `R/engine_features.R` | one adapter per feature engine: DESeq2, edgeR, limma-voom, limma, dream, DSS, edgeR IP x input, native |
+| `inst/rules/engines.tsv`, `engine_selection.tsv` | the registry (package, calls, model, test, multiple testing, assumptions, reference, tutorial) and the per-data-type, per-design ranking |
+| `docs/engines/` | one tutorial per engine (the package's example code, then the same through Bioana, then the gold check) |
 | `R/linear_test.R` | the shared feature engine: per-feature linear model with the design's fixed terms, empirical-Bayes moderated t (limma's squeezeVar, native), BH; truth scoring by feature or by region overlap |
 | `R/method_outcome.R` | primary outcome by type (lm/lmer, glm/glmer, glm.nb, clm/clmm, coxph) and its truth scoring |
 | `R/method_features.R` | each feature data type: builds the matrix on a testable scale, then the engine |
@@ -89,6 +98,17 @@ model-matrix column names (`treatmenttreatment_2`).
 | `inst/rules/genetics.json` | genotype term pattern (**a copy of Simitall's `inst/suite/genetics.json` pattern: change both**), QTN types scored, cross mating schemes |
 | `inst/rules/handoff.json`, `model_terms.json` | Biodes contract (supported handoff versions, model-term vocabulary); copies of Simitall's |
 | `tests/testthat/` | `test-analyze.R`: synthetic data in a fixture RCBD folder (no Biodes or Simitall needed); `test-gwas-selection.R`, `test-legacy-analyses.R`: the tests moved with the functions, which simulate with Simitall (skipped without it) |
+
+## Adding an engine
+
+1. A row in `inst/rules/engines.tsv` (package, requires, input kind, calls,
+   model, test statistic, multiple testing, random terms, estimate scale,
+   assumptions, reference, doc) and its rank in `engine_selection.tsv`.
+2. An adapter `.ba_engine_<engine>(inputs, design, alpha, args)` returning
+   `.ba_engine_result()` (table: feature_id, contrast, estimate, se,
+   statistic, p, padj; contrast = model-matrix column name).
+3. A tutorial `docs/engines/<engine>.md` and a gold check in
+   `test-engines.R` (adapter = the package called directly, same numbers).
 
 ## Adding a data type
 
@@ -109,6 +129,18 @@ outcome CI covered; RNA-seq 9/50 true changes found (FDR 0.10, estimate r
 DMR windows (FDR 0.06); m6A 2/40 (5 per group is little power for m6A);
 small RNA and microbiome 0 found (the real templates vary a lot between
 samples: signs right, r 0.75 and 0.42, but 5 per group is not enough).
+
+## Engines (v0.4, 2026-11-23)
+
+Gold-standard packages replace the native statistics: DESeq2, edgeR,
+limma-voom, limma, dream, DSS, edgeR IP x input, lm/lmer/glm/glmer/glm.nb/
+clm/coxph, glmmTMB, rrBLUP, GAPIT. Results tables use `statistic` (not `t`).
+`bioana_analyze(secondary = NA)` asks (interactive) or skips; `TRUE` runs the
+secondary engine and writes `results_<engine>.tsv` and `concordance`.
+Simitall calls `bioana_analyze(quiet = TRUE)`, so it is never asked.
+Tested here: DESeq2 1.42, edgeR 4.0, limma 3.58, DSS 2.50, glmmTMB 1.1.8.
+Not installable in the build environment (CRAN/Bioconductor blocked):
+variancePartition (dream), rrBLUP, GAPIT; their tests skip without them.
 
 ## Genotypes (v0.3, 2026-11-23)
 

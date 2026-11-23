@@ -24,7 +24,8 @@
 #' @param p3d Estimate variance components once before scanning markers. This is
 #'   faster than marker-specific REML but can be less significant.
 #' @param fdr_threshold BH-adjusted p-value threshold used to label discoveries.
-#' @param backend `"auto"` (rrBLUP when installed, else native), `"rrBLUP"`, or
+#' @param backend `"auto"` (rrBLUP when installed, else native), `"rrBLUP"`,
+#'   `"GAPIT"` (compressed MLM, kinship + PCs; returns allele effects), or
 #'   `"native"`: the same model (kinship random effect, PCs and `fixed_effects`
 #'   as fixed covariates, variance components estimated once by REML, as
 #'   EMMAX / rrBLUP with `P3D = TRUE`), then GLS per marker. The native scan
@@ -58,10 +59,11 @@ analyze_gwas <- function(
     n_cores = 1L,
     p3d = TRUE,
     fdr_threshold = 0.05,
-    backend = c("auto", "rrBLUP", "native")) {
+    backend = c("auto", "rrBLUP", "GAPIT", "native")) {
   backend <- match.arg(backend)
   if (backend == "auto") backend <- if (requireNamespace("rrBLUP", quietly = TRUE)) "rrBLUP" else "native"
   if (backend == "rrBLUP") .bioana_require_package("rrBLUP", "GWAS analysis")
+  if (backend == "GAPIT") .bioana_require_package("GAPIT", "GWAS analysis (GAPIT)")
   if (backend == "native" && !isTRUE(p3d)) stop("p3d = FALSE (marker-specific REML) needs backend = 'rrBLUP'")
   genotype_data <- .bioana_read_genotypes(genotype_file)
   sample_ids <- colnames(genotype_data$genotype)
@@ -103,7 +105,7 @@ analyze_gwas <- function(
   pheno_columns <- unique(c(sample_id, trait, fixed_effects))
   pheno <- phenotype[observed, pheno_columns, drop = FALSE]
   names(pheno)[names(pheno) == sample_id] <- "line"
-  if (is.null(kinship)) {
+  if (is.null(kinship) && backend != "GAPIT") {
     kinship <- if (backend == "rrBLUP") rrBLUP::A.mat(t(rr_dosage)) else .bioana_kinship(rr_dosage)
   } else {
     kinship <- as.matrix(kinship)
@@ -135,6 +137,13 @@ analyze_gwas <- function(
     }
     score <- as.numeric(scores[[score_column]])
     beta <- se <- rep(NA_real_, length(score))
+    h2_null <- NA_real_
+  } else if (backend == "GAPIT") {
+    gp <- .bioana_gwas_gapit(rr_dosage + 1, variants, pheno, trait, as.integer(n_pcs))
+    scores <- gp[, c("marker", "chrom", "pos")]
+    score <- -log10(gp$p)
+    beta <- gp$beta
+    se <- rep(NA_real_, nrow(gp))
     h2_null <- NA_real_
   } else {
     covariates <- if (length(fixed_effects)) {
@@ -182,7 +191,7 @@ analyze_gwas <- function(
     row.names = FALSE
   )
   summary <- list(
-    backend = if (backend == "rrBLUP") "rrBLUP::GWAS" else "native EMMAX (P3D)",
+    backend = switch(backend, rrBLUP = "rrBLUP::GWAS", GAPIT = "GAPIT::GAPIT (MLM)", native = "native EMMAX (P3D)"),
     trait = trait,
     samples = sum(observed),
     markers_tested = nrow(result),
@@ -800,4 +809,26 @@ plot_gwas_results <- function(
   r[is.na(r)] <- 0
   out[ok_r, ok_t] <- r^2
   out
+}
+
+# GAPIT MLM on 0/1/2 dosages (markers x samples). GAPIT's output column names have changed
+# between releases, so the p value and effect columns are found by name pattern.
+.bioana_gwas_gapit <- function(dosage, variants, pheno, trait, n_pcs) {
+  ids <- colnames(dosage)
+  Y <- data.frame(Taxa = pheno$line, trait = pheno[[trait]], stringsAsFactors = FALSE)
+  GD <- data.frame(Taxa = ids, t(dosage), check.names = FALSE, stringsAsFactors = FALSE)
+  GM <- data.frame(SNP = variants$id, Chromosome = sub("^chr", "", variants$seqname), Position = variants$pos,
+                   stringsAsFactors = FALSE)
+  out <- tempfile("bioana_gapit_"); dir.create(out); old <- setwd(out); on.exit(setwd(old), add = TRUE)
+  res <- suppressWarnings(utils::capture.output(g <- getExportedValue("GAPIT", "GAPIT")(Y = Y, GD = GD, GM = GM, model = "MLM",
+                                                                PCA.total = n_pcs, file.output = FALSE)))
+  tab <- g$GWAS
+  if (is.null(tab) || !nrow(tab)) stop("GAPIT returned no GWAS table")
+  pcol <- grep("^p[._]?value$", names(tab), ignore.case = TRUE, value = TRUE)[1]
+  ecol <- grep("effect", names(tab), ignore.case = TRUE, value = TRUE)[1]
+  if (is.na(pcol)) stop("GAPIT GWAS table has no P.value column: ", paste(names(tab), collapse = ", "))
+  m <- match(as.character(tab$SNP), variants$id)
+  data.frame(marker = variants$id[m], chrom = variants$seqname[m], pos = variants$pos[m],
+             p = as.numeric(tab[[pcol]]), beta = if (is.na(ecol)) NA_real_ else as.numeric(tab[[ecol]]),
+             stringsAsFactors = FALSE)
 }

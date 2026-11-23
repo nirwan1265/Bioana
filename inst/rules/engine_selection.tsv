@@ -1,0 +1,51 @@
+data_type	design	rank	engine	note
+feature_counts	fixed	1	deseq2	no random terms in analysis.model: independent units
+feature_counts	fixed	2	edger	
+feature_counts	fixed	3	limma_voom	
+feature_counts	fixed	9	bioana_native	fallback
+feature_counts	random	1	dream	random terms (repeated or nested units): mixed model per feature
+feature_counts	random	2	limma_voom	one random grouping term only (duplicateCorrelation)
+feature_counts	random	9	bioana_native	fallback: random terms dropped
+peak_counts_long	fixed	1	edger	csaw and DiffBind fit edgeR/DESeq2 on peak or window counts; adapters for them come later
+peak_counts_long	fixed	2	deseq2	
+peak_counts_long	fixed	9	bioana_native	fallback
+peak_counts_long	random	1	dream	
+peak_counts_long	random	2	limma_voom	one random grouping term only
+peak_counts_long	random	9	bioana_native	fallback: random terms dropped
+read_positions	fixed	1	edger	window counts tested as csaw does (edgeR QL)
+read_positions	fixed	2	deseq2	
+read_positions	fixed	9	bioana_native	fallback
+read_positions	random	1	dream	
+read_positions	random	2	limma_voom	one random grouping term only
+read_positions	random	9	bioana_native	fallback: random terms dropped
+bisulfite_counts	fixed	1	dss	beta-binomial on methylated and total reads
+bisulfite_counts	fixed	2	limma	M-values
+bisulfite_counts	fixed	9	bioana_native	fallback
+bisulfite_counts	random	1	limma	M-values; one random grouping term (DSS has no random terms)
+bisulfite_counts	random	9	bioana_native	fallback: random terms dropped
+methylation_beta	fixed	1	limma	M-values, as minfi/limma
+methylation_beta	fixed	9	bioana_native	fallback
+methylation_beta	random	1	limma	one random grouping term
+methylation_beta	random	9	bioana_native	fallback: random terms dropped
+ip_input_counts	fixed	1	edger_ip_input	IP x treatment interaction on IP and input counts
+ip_input_counts	fixed	2	limma	log2(IP/input)
+ip_input_counts	fixed	9	bioana_native	fallback
+ip_input_counts	random	1	limma	log2(IP/input); one random grouping term
+ip_input_counts	random	9	bioana_native	fallback: random terms dropped
+outcome:continuous	fixed	1	stats_lm	
+outcome:continuous	fixed	2	glmmtmb	
+outcome:continuous	random	1	lmer	
+outcome:continuous	random	2	glmmtmb	
+outcome:binary	fixed	1	glm_binomial	
+outcome:binary	fixed	2	glmmtmb	
+outcome:binary	random	1	glmer_binomial	
+outcome:binary	random	2	glmmtmb	
+outcome:count	fixed	1	glm_nb	
+outcome:count	fixed	2	glmmtmb	nbinom2
+outcome:count	random	1	glmer_nb	
+outcome:count	random	2	glmmtmb	nbinom2
+outcome:ordinal	any	1	clm	
+outcome:survival	any	1	coxph	
+genotypes	any	1	rrblup	line means; mixed-model GWAS
+genotypes	any	2	gapit_mlm	
+genotypes	any	9	bioana_emmax	fallback

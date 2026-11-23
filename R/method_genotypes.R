@@ -28,9 +28,18 @@
   if (!all(in_vcf)) warn <- c(warn, sprintf("%d lines have no genotypes and are left out: %s", sum(!in_vcf),
                                             paste(utils::head(means$line[!in_vcf], 5), collapse = ", ")))
   n_pcs <- .ba_gwas_n_pcs(args$n_pcs %||% "auto", design)
-  gw <- analyze_gwas(vcf, means[in_vcf & is.finite(means$mean), c("line", "mean")], file.path(outdir, "gwas"),
-                     trait = "mean", sample_id = "line", n_pcs = n_pcs, min_maf = args$min_maf %||% 0.05,
-                     fdr_threshold = alpha, backend = args$backend %||% "auto")
+  ch <- .ba_engine_chain("genotypes", design, NULL, args$engine)
+  backends <- c(rrblup = "rrBLUP", gapit_mlm = "GAPIT", bioana_emmax = "native")
+  failed <- list()
+  for (eng in ch$chain) {
+    gw <- tryCatch(analyze_gwas(vcf, means[in_vcf & is.finite(means$mean), c("line", "mean")], file.path(outdir, "gwas"),
+                                trait = "mean", sample_id = "line", n_pcs = n_pcs, min_maf = args$min_maf %||% 0.05,
+                                fdr_threshold = alpha, backend = backends[[eng]]), error = function(e) e)
+    if (!inherits(gw, "error")) break
+    failed[[eng]] <- conditionMessage(gw)
+  }
+  if (inherits(gw, "error")) stop("Every GWAS engine failed: ", paste(names(failed), unlist(failed), sep = ": ", collapse = "; "), call. = FALSE)
+  ch$skipped <- c(ch$skipped, lapply(failed, function(m) paste("failed:", m)))
   g <- gw$results
   res <- data.frame(marker_id = g$marker_id, seqname = g$seqname, pos = g$pos, estimate = g$beta, se = g$se,
                     p = g$p_value, padj = g$q_value, maf = g$maf, significant = g$significant, stringsAsFactors = FALSE)
@@ -41,7 +50,14 @@
                   n_lines = sum(in_vcf & is.finite(means$mean)), n_markers = nrow(gt$genotype),
                   n_features_tested = nrow(res), n_pcs = n_pcs, min_maf = args$min_maf %||% 0.05,
                   null_model_h2 = gw$summary$null_model_h2,
-                  significant = list(markers = sum(res$significant, na.rm = TRUE)), warnings = warn)
+                  significant = list(markers = sum(res$significant, na.rm = TRUE)), warnings = warn,
+                  engine = .ba_provenance(eng, design,
+                                          sprintf("analyze_gwas(vcf, line_means, backend = '%s', n_pcs = %d, min_maf = %g) after line means from %s",
+                                                  backends[[eng]], n_pcs, args$min_maf %||% 0.05, lm_out$model),
+                                          sprintf("line means of %d lines; %d markers in %s", sum(in_vcf & is.finite(means$mean)), nrow(gt$genotype), entry$files$vcf),
+                                          sum(in_vcf & is.finite(means$mean)), ch,
+                                          random = sprintf("line means are BLUEs from %s; kinship random effect in the scan", lm_out$model)),
+                  secondary_engine = .ba_secondary_engine(ch$chain, eng))
   truth <- .ba_qtn_truth(entry, design$dir)
   rec <- NULL
   if (!is.null(truth)) {

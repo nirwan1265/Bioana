@@ -20,7 +20,7 @@
   rows <- which(vapply(colnames(X), function(t) .ba_coef_role(t, p), "") == "treatment")
   rows <- rows[rows %in% qrx$pivot[seq_len(qrx$rank)]]
   empty <- data.frame(feature_id = character(), contrast = character(), estimate = numeric(), se = numeric(),
-                      t = numeric(), p = numeric(), padj = numeric())
+                      statistic = numeric(), p = numeric(), padj = numeric())
   if (!length(rows) || df < 1 || !nrow(Y)) {
     why <- if (!length(rows)) "the model has no fixed treatment term" else if (df < 1) "no residual degrees of freedom" else "no feature varies"
     return(list(table = empty, warnings = paste("features not tested:", why),
@@ -39,7 +39,7 @@
     k <- match(j, piv)
     se <- sqrt(sq$var_post * xtxi[k, k])
     tt <- beta[j, ] / se
-    data.frame(feature_id = colnames(Yt), contrast = colnames(X)[j], estimate = beta[j, ], se = se, t = tt,
+    data.frame(feature_id = colnames(Yt), contrast = colnames(X)[j], estimate = beta[j, ], se = se, statistic = tt,
                p = 2 * stats::pt(-abs(tt), df + sq$df_prior), stringsAsFactors = FALSE, row.names = NULL)
   }))
   tab$padj <- stats::ave(tab$p, tab$contrast, FUN = function(x) stats::p.adjust(x, "BH"))

@@ -17,7 +17,7 @@ analyze_gwas(
   n_cores = 1L,
   p3d = TRUE,
   fdr_threshold = 0.05,
-  backend = c("auto", "rrBLUP", "native")
+  backend = c("auto", "rrBLUP", "GAPIT", "native")
 )
 }
 \arguments{
@@ -49,7 +49,8 @@ faster than marker-specific REML but can be less significant.}
 
 \item{fdr_threshold}{BH-adjusted p-value threshold used to label discoveries.}
 
-\item{backend}{\code{"auto"} (rrBLUP when installed, else native), \code{"rrBLUP"}, or
+\item{backend}{\code{"auto"} (rrBLUP when installed, else native), \code{"rrBLUP"},
+\code{"GAPIT"} (compressed MLM, kinship + PCs; returns allele effects), or
 \code{"native"}: the same model (kinship random effect, PCs and \code{fixed_effects}
 as fixed covariates, variance components estimated once by REML, as
 EMMAX / rrBLUP with \code{P3D = TRUE}), then GLS per marker. The native scan

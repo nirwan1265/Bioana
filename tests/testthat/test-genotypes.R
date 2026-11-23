@@ -44,7 +44,7 @@ gwas_folder <- function(n_lines = 80, n_blocks = 2, n_markers = 400, qtn_effect 
 
 test_that("genotypes: line means from the design's model, native GWAS, QTN scored", {
   f <- gwas_folder()
-  out <- utils::capture.output(r <- bioana_analyze(f$dir, params = list(genotypes = list(backend = "native"))))
+  out <- utils::capture.output(r <- bioana_analyze(f$dir, params = list(genotypes = list(engine = "bioana_emmax"))))
   expect_null(r$summary$not_analysed$genetics)
   a <- r$summary$analyses$genetics
   expect_equal(a$genotype_term, "treatment")
@@ -64,7 +64,7 @@ test_that("genotypes: line means from the design's model, native GWAS, QTN score
   q <- utils::read.delim(file.path(f$dir, "bioana", "genetics", "qtn_recovery.tsv"))
   expect_true(all(c("marker_id", "type", "effect", "tested", "recovered", "estimate", "p", "padj") %in% names(q)))
   expect_true(all(q$recovered[abs(q$effect) >= 1]))
-  expect_true(any(grepl("\\[genetics\\] 80 lines x .* QTN found", out)))
+  expect_true(any(grepl("\\[genetics\\].* 80 lines x .* QTN found", out)))
 })
 
 test_that("the genotype term is found from the rules when the folder does not name it", {
@@ -122,7 +122,7 @@ test_that("a Simitall GWAS design runs end to end", {
     params = list(suite_genetics = list(heritability = 0.8), suite_genotype_panel = list(n_markers = 600))))
   man <- bioana_manifest(f$dir)
   expect_true("genotypes" %in% vapply(man$data, `[[`, "", "data_type"))
-  utils::capture.output(r <- bioana_analyze(f$dir, only = "genotypes", params = list(genotypes = list(backend = "native"))))
+  utils::capture.output(r <- bioana_analyze(f$dir, only = "genotypes", params = list(genotypes = list(engine = "bioana_emmax"))))
   a <- r$summary$analyses$genetics
   expect_equal(a$n_lines, 60)
   expect_gt(a$line_mean_cor, 0.7)

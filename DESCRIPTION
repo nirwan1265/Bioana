@@ -1,6 +1,6 @@
 Package: bioana
 Title: Analyse Biodes Experiments, Simulated or Real
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: person("Nirwan", "Tandukar", email = "tandukar.nirwan@gmail.com", role = c("aut", "cre"))
 Description: Reads a Biodes design folder (study_spec.json, field_layout.csv,
     sample metadata) and the data listed in its data_manifest.json, and runs
@@ -9,13 +9,17 @@ Description: Reads a Biodes design folder (study_spec.json, field_layout.csv,
     counts (RNA-seq, small RNA, microbiome, ChIP and ATAC peaks), bisulfite and
     array methylation, and m6A MeRIP-seq. When the folder comes from Simitall
     and carries the simulated truth, every analysis is scored against it.
+    Each analysis calls a published package chosen by rule tables (DESeq2,
+    edgeR, limma, dream, DSS, lme4, glmmTMB, rrBLUP, GAPIT, ...) and records
+    the package, version, exact call, model, test and assumptions.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Depends: R (>= 4.1)
 Imports: jsonlite, Matrix, stats, utils
-Suggests: BGLR, DESeq2, edgeR, ggplot2, limma, lme4, lmerTest, MASS, ordinal, patchwork,
-    ranger, reformulas, rrBLUP, simitall, survival, testthat (>= 3.0.0)
+Suggests: BGLR, BiocGenerics, bsseq, DESeq2, DSS, edgeR, GenomeInfoDb, ggplot2, glmmTMB,
+    limma, lme4, lmerTest, MASS, ordinal, patchwork, ranger, reformulas, rrBLUP, simitall,
+    survival, testthat (>= 3.0.0), variancePartition
 Remotes: nirwan1265/simitall
 Config/testthat/edition: 3

@@ -11,6 +11,5 @@ bisulfite_counts	pool_contexts	FALSE	logical	TRUE pools CG, CHG and CHH in one w
 ip_input_counts	min_input	5	numeric	windows with a lower mean input count are not tested
 genotypes	n_pcs	auto	character	principal components of the kinship as fixed covariates in the scan; auto = 0 for lines from a cross (population.mating in genetics.json cross_mating, or Simitall's cross source), 3 otherwise
 genotypes	min_maf	0.05	numeric	markers below this minor allele frequency among the phenotyped lines are not tested
-genotypes	backend	auto	character	auto (rrBLUP::GWAS when installed, else native), rrBLUP, or native (EMMAX: kinship mixed model, variances fitted once, GLS per marker)
 genotypes	ld_r2	0.5	numeric	truth scoring: a hit counts as a QTN hit when its r2 with the QTN marker (same chromosome) is at least this
 genotypes	window_bp	0	integer	truth scoring: a hit within this many bp of a QTN also counts (0 = exact or LD only)

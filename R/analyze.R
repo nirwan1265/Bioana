@@ -19,6 +19,13 @@
 #'   see `inst/rules/method_parameters.tsv`.
 #' @param only Optional ids or data types to run.
 #' @param quiet `TRUE` skips the one-line-per-data-set report.
+#' @param secondary Run the secondary engine (the next gold-standard package in
+#'   `inst/rules/engine_selection.tsv`) as well, and report how well it agrees
+#'   with the primary: `TRUE`, `FALSE`, or `NA` (default) to ask when the
+#'   session is interactive and `quiet = FALSE` (no otherwise). Its results go
+#'   to `<outdir>/<id>/results_<engine>.tsv`. Pick an engine per data type with
+#'   `params`, e.g. `list(feature_counts = list(engine = "edger"))`; see
+#'   [bioana_engines()] and [bioana_engine_plan()].
 #' @return Invisibly, a list: `summary` (per data set, as in `bioana_summary.json`),
 #'   `results` (tables by id), `recovery` (truth tables by id, simulated data), `fits`, `paths`.
 #' @examples
@@ -27,7 +34,8 @@
 #' bioana_analyze("~/biodes_runs/my_design")
 #' }
 #' @export
-bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05, params = NULL, only = NULL, quiet = FALSE) {
+bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05, params = NULL, only = NULL, quiet = FALSE,
+                           secondary = NA) {
   design <- .ba_read_biodes(dir)
   man <- bioana_manifest(dir)
   if (!length(man$data)) {
@@ -36,7 +44,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   tab <- .ba_tsv("analyses")
   defaults <- .ba_tsv("method_parameters")
   dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
-  summ <- list(); results <- list(); recovery <- list(); fits <- list(); paths <- character(); skipped <- list()
+  summ <- list(); results <- list(); recovery <- list(); fits <- list(); paths <- character(); skipped <- list(); ran <- list()
   for (e in man$data) {
     if (!is.null(only) && !e$id %in% only && !e$data_type %in% only) next
     row <- tab[tab$data_type == e$data_type, , drop = FALSE]
@@ -56,10 +64,35 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
       next
     }
     summ[[e$id]] <- r$summary
+    ran[[e$id]] <- list(entry = e, fn = fn, args = args)
     results[[e$id]] <- r$results
     if (!is.null(r$recovery)) recovery[[e$id]] <- r$recovery
     if (!is.null(r$fit)) fits[[e$id]] <- r$fit
     paths <- c(paths, stats::setNames(r$paths, paste0(e$id, "/", names(r$paths))))
+  }
+  cands <- Filter(Negate(is.null), lapply(summ, `[[`, "secondary_engine"))
+  if (length(cands) && is.na(secondary)) {
+    secondary <- FALSE
+    if (interactive() && !quiet) {
+      e_tab <- .ba_tsv("engines")
+      cat(sprintf("Secondary engines available: %s\n", paste(sprintf("%s -> %s", names(cands), e_tab$package[match(unlist(cands), e_tab$engine)]), collapse = ", ")))
+      secondary <- tolower(substr(readline("Run them too and compare with the primary? [y/N] "), 1, 1)) == "y"
+    }
+  }
+  if (isTRUE(secondary)) {
+    for (id in names(cands)) {
+      x <- ran[[id]]; sec <- cands[[id]]
+      tmp <- file.path(tempfile("bioana_secondary_"), id)
+      r2 <- tryCatch(x$fn(x$entry, design, tmp, alpha, utils::modifyList(x$args, list(engine = sec))), error = function(err) err)
+      if (inherits(r2, "error")) {
+        summ[[id]]$secondary <- list(engine = sec, status = "error", note = conditionMessage(r2))
+        next
+      }
+      p2 <- .ba_write_tsv(r2$results, file.path(outdir, id, paste0("results_", sec, ".tsv")))
+      paths <- c(paths, stats::setNames(p2, paste0(id, "/results_", sec)))
+      summ[[id]]$secondary <- list(engine = r2$summary$engine, concordance = .ba_concordance(results[[id]], r2$results, alpha),
+                                   recovery = r2$summary$recovery)
+    }
   }
   out <- list(bioana_version = as.character(utils::packageVersion("bioana")), design = design$spec$design$chosen,
               model = design$model, handoff_version = design$spec$handoff_version,
@@ -98,7 +131,20 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     } else {
       paste0("; truth: ", paste(vapply(rec, function(r) sprintf("%s found %d/%d (FDR %s)", r$contrast, r$true_positives, r$true_changes, r$fdr), ""), collapse = ", "))
     }
-    cat(sprintf("  [%s] %s%s\n", id, line, rtxt))
+    eng <- a$engine
+    etxt <- if (is.null(eng)) "" else sprintf(" [%s %s%s]", eng$package, eng$version, if (isTRUE(eng$fallback_used)) ", FALLBACK" else "")
+    cat(sprintf("  [%s]%s %s%s\n", id, etxt, line, rtxt))
+    sec <- a[["secondary"]]
+    if (!is.null(sec$concordance)) {
+      cc <- sec$concordance
+      cat(sprintf("      secondary %s %s: estimates r %s, significant in both %d, primary only %d, secondary only %d\n",
+                  sec$engine$package, sec$engine$version, cc$estimate_cor, cc$significant_both, cc$significant_primary_only, cc$significant_secondary_only))
+    } else if (!is.null(sec$status)) {
+      cat(sprintf("      secondary %s failed: %s\n", sec$engine, sec$note))
+    }
   }
+  offer <- Filter(Negate(is.null), lapply(s$analyses, function(a) if (is.null(a[["secondary"]])) a[["secondary_engine"]]))
+  if (length(offer)) cat(sprintf("  secondary engines not run (%s): bioana_analyze(dir, secondary = TRUE)\n",
+                                 paste(sprintf("%s -> %s", names(offer), unlist(offer)), collapse = ", ")))
   for (id in names(s$not_analysed)) cat(sprintf("  [%s] not analysed (%s): %s\n", id, s$not_analysed[[id]]$status, s$not_analysed[[id]]$note))
 }

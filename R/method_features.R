@@ -14,6 +14,10 @@
   ft$summary$data_type <- entry$data_type
   ft$summary$assay <- entry$assay
   ft$summary <- c(ft$summary, extra_summary)
+  eng <- ft$summary$engine
+  if (!is.null(eng) && !identical(.ba_tsv("engines")$input[.ba_tsv("engines")$engine == eng$engine], "values")) {
+    ft$summary$scale <- eng$estimate_scale
+  }
   paths <- c(results = .ba_write_tsv(ft$table, file.path(outdir, "results.tsv")))
   truth <- .ba_entry_truth(entry, design$dir)
   if (!is.null(truth)) {
@@ -27,12 +31,18 @@
   list(summary = ft$summary, paths = paths, results = ft$table)
 }
 
+# Counts per feature: the engine chain (DESeq2 / edgeR / limma-voom / dream, native log-CPM fallback).
+.ba_count_inputs <- function(m, args, what = "log2 CPM") {
+  lc <- .ba_logcpm(m, args$min_cpm %||% 1)
+  list(inputs = list(counts = m[rownames(lc$y), , drop = FALSE], values = lc$y, values_scale = what), dropped = lc$dropped)
+}
+
 # feature_counts: files$counts = feature x sample count matrix (first column the feature id).
 .ba_method_feature_counts <- function(entry, design, outdir, alpha = 0.05, args = list()) {
   m <- .ba_read_matrix(file.path(design$dir, entry$files$counts))
-  lc <- .ba_logcpm(m, args$min_cpm %||% 1)
-  ft <- .ba_feature_test(lc$y, design$meta, design$parsed, alpha)
-  if (lc$dropped) ft$warnings <- c(ft$warnings, sprintf("%d low-count features not tested (CPM < %g in most samples)", lc$dropped, args$min_cpm %||% 1))
+  ci <- .ba_count_inputs(m, args)
+  ft <- .ba_feature_engines(ci$inputs, entry, design, alpha, args)
+  if (ci$dropped) ft$warnings <- c(ft$warnings, sprintf("%d low-count features not tested (CPM < %g in most samples)", ci$dropped, args$min_cpm %||% 1))
   .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = "log2 CPM"), large = 1)
 }
 
@@ -47,8 +57,8 @@
   m <- tapply(x$count, list(x$peak_id, x$sample_id), sum)
   m[is.na(m)] <- 0
   m <- unclass(m); storage.mode(m) <- "double"
-  lc <- .ba_logcpm(m, args$min_cpm %||% 1)
-  ft <- .ba_feature_test(lc$y, design$meta, design$parsed, alpha)
+  ci <- .ba_count_inputs(m, args, "log2 CPM of IP reads per peak")
+  ft <- .ba_feature_engines(ci$inputs, entry, design, alpha, args)
   .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = "log2 CPM of IP reads per peak"), large = 1)
 }
 
@@ -63,17 +73,18 @@
   x$bin <- paste0(x$seqname, ":", (x$read_position %/% bin) * bin + 1L)
   m <- unclass(table(x$bin, x$sample_id)); storage.mode(m) <- "double"
   m <- m[rowSums(m) >= (args$min_reads %||% 10), , drop = FALSE]
-  lc <- .ba_logcpm(m, args$min_cpm %||% 1)
-  ft <- .ba_feature_test(lc$y, design$meta, design$parsed, alpha)
+  sc <- sprintf("log2 CPM of reads in %d bp windows", bin)
+  ci <- .ba_count_inputs(m, args, sc)
+  ft <- .ba_feature_engines(ci$inputs, entry, design, alpha, args)
   feats <- data.frame(feature_id = rownames(m), chr = sub(":.*", "", rownames(m)),
                       start = as.integer(sub(".*:", "", rownames(m))), stringsAsFactors = FALSE)
   feats$end <- feats$start + bin - 1L
-  .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = sprintf("log2 CPM of reads in %d bp windows", bin), window_bp = bin),
-                      features = feats, large = 1)
+  .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = sc, window_bp = bin), features = feats, large = 1)
 }
 
 # bisulfite_counts: sites (feature_id, chr, pos[, context]) with methylated and coverage matrices.
-# Sites are pooled into windows; each window's methylated share per sample on the logit scale (M-value).
+# Sites are pooled into windows (per context). DSS fits the pooled reads; limma and the native
+# fallback test each window's M-value (log2 methylated/unmethylated).
 .ba_method_bisulfite_counts <- function(entry, design, outdir, alpha = 0.05, args = list()) {
   win <- as.integer(args$window_bp %||% 1000); min_cov <- as.numeric(args$min_coverage %||% 10)
   sites <- utils::read.delim(file.path(design$dir, entry$files$sites), stringsAsFactors = FALSE)
@@ -85,45 +96,46 @@
   M <- rowsum(me[, colnames(cv), drop = FALSE], w); C <- rowsum(cv, w)
   Y <- log2((M + 0.5) / (C - M + 0.5))
   Y[C < min_cov] <- NA
-  ft <- .ba_feature_test(Y, design$meta, design$parsed, alpha)
-  n_low <- sum(!stats::complete.cases(Y))
-  if (n_low) ft$warnings <- c(ft$warnings, sprintf("%d windows below %g reads in some sample not tested", n_low, min_cov))
-  # report the change also as a difference in methylated share at the mean level
-  prop <- C; prop[] <- M / pmax(C, 1)
+  keep <- stats::complete.cases(Y)
   feats <- data.frame(feature_id = rownames(Y), chr = sub(":.*", "", rownames(Y)),
                       start = as.integer(sub("^[^:]*:([0-9]+).*$", "\\1", rownames(Y))), stringsAsFactors = FALSE)
   feats$end <- feats$start + win - 1L
+  if (length(ctx) > 1) feats$context <- sub("^[^:]*:[0-9]+:", "", rownames(Y))
+  sc <- sprintf("M-value (log2 methylated/unmethylated reads) per %d bp window%s", win, if (length(ctx) > 1) " and context" else "")
+  inputs <- list(values = Y[keep, , drop = FALSE], values_scale = sc, methylated = M[keep, , drop = FALSE],
+                 coverage = C[keep, , drop = FALSE], features = feats)
+  ft <- .ba_feature_engines(inputs, entry, design, alpha, args)
+  if (sum(!keep)) ft$warnings <- c(ft$warnings, sprintf("%d windows below %g reads in some sample not tested", sum(!keep), min_cov))
+  prop <- C; prop[] <- M / pmax(C, 1)
   ft$table$mean_methylation <- round(rowMeans(prop)[ft$table$feature_id], 4)
-  .ba_finish_features(ft, entry, design, outdir, alpha,
-                      list(scale = sprintf("M-value (log2 methylated/unmethylated reads) per %d bp window%s", win, if (length(ctx) > 1) " and context" else ""),
-                           window_bp = win, min_coverage = min_cov),
-                      features = feats)
+  .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = sc, window_bp = win, min_coverage = min_cov), features = feats)
 }
 
 # methylation_beta: array beta values (probe x sample) tested as M-values.
 .ba_method_methylation_beta <- function(entry, design, outdir, alpha = 0.05, args = list()) {
   b <- .ba_read_matrix(file.path(design$dir, entry$files$beta))
   b <- pmin(pmax(b, 0.001), 0.999)
-  ft <- .ba_feature_test(log2(b / (1 - b)), design$meta, design$parsed, alpha)
-  .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = "M-value (log2 beta/(1-beta))"))
+  sc <- "M-value (log2 beta/(1-beta))"
+  ft <- .ba_feature_engines(list(values = log2(b / (1 - b)), values_scale = sc), entry, design, alpha, args)
+  .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = sc))
 }
 
-# ip_input_counts (MeRIP-seq, MeDIP, RIP): IP and input counts per window. Each library is scaled to
-# its size; the tested value is log2(IP / input) per window, so expression changes (both libraries)
-# cancel and only enrichment changes remain.
+# ip_input_counts (MeRIP-seq, MeDIP, RIP): IP and input counts per window. edgeR fits both libraries
+# with an IP x treatment interaction; limma and the native fallback test log2(IP / input) per window,
+# IP scaled by its median ratio to input, so expression changes (both libraries) cancel.
 .ba_method_ip_input <- function(entry, design, outdir, alpha = 0.05, args = list()) {
   ip <- .ba_read_matrix(file.path(design$dir, entry$files$ip))
   inp <- .ba_read_matrix(file.path(design$dir, entry$files$input))
   ids <- intersect(colnames(ip), colnames(inp))
   ip <- ip[, ids, drop = FALSE]; inp <- inp[rownames(ip), ids, drop = FALSE]
   keep <- rowMeans(inp) >= (args$min_input %||% 5)
-  # IP efficiency differs between units: scale IP by its median ratio to input over all windows kept
   sf_in <- colSums(inp) / mean(colSums(inp))
   r <- (ip[keep, , drop = FALSE] + 1) / sweep(inp[keep, , drop = FALSE] + 1, 2, sf_in, "/")
   sf_ip <- apply(r, 2, stats::median)
   Y <- log2(sweep(ip[keep, , drop = FALSE] + 1, 2, sf_ip, "/") / sweep(inp[keep, , drop = FALSE] + 1, 2, sf_in, "/"))
-  ft <- .ba_feature_test(Y, design$meta, design$parsed, alpha)
+  sc <- "log2(IP / input) per window, IP scaled by its median ratio to input"
+  inputs <- list(values = Y, values_scale = sc, ip = ip[keep, , drop = FALSE], input = inp[keep, , drop = FALSE])
+  ft <- .ba_feature_engines(inputs, entry, design, alpha, args)
   ft$table$mean_log2_enrichment <- round(rowMeans(Y)[ft$table$feature_id], 3)
-  .ba_finish_features(ft, entry, design, outdir, alpha,
-                      list(scale = "log2(IP / input) per window, IP scaled by its median ratio to input", windows_tested = sum(keep)))
+  .ba_finish_features(ft, entry, design, outdir, alpha, list(scale = sc, windows_tested = sum(keep)))
 }

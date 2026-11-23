@@ -1,3 +1,25 @@
+# bioana 0.4.0
+
+- Gold-standard engines. `inst/rules/engines.tsv` (registry) and
+  `inst/rules/engine_selection.tsv` (order per data type and design) decide
+  which package fits each data set: DESeq2, edgeR, limma-voom, dream, limma,
+  DSS, an edgeR IP x input interaction model, lm/lmer/glm/glmer/glm.nb/clm/
+  coxph, glmmTMB, rrBLUP, GAPIT. Native Bioana code is the fallback only and
+  is flagged.
+- Every data set records an `engine` provenance block (package, version,
+  exact call, formula, model, input, assumptions, test statistic, multiple
+  testing, experimental unit, fallback used and why).
+- `bioana_analyze(secondary = )`: run the secondary engine and report
+  concordance with the primary; asks in interactive sessions by default.
+- `bioana_engines()`, `bioana_engine_plan()`; `params = list(<data_type> =
+  list(engine = "..."))` picks an engine.
+- Random terms in feature tests: dream, or limma with duplicateCorrelation.
+- Feature results: column `t` renamed `statistic` (Wald z, QL F or moderated t).
+- `docs/engines/`: a tutorial per engine; `tests/testthat/test-engines.R`:
+  gold checks (adapter = package called directly).
+- `genotypes`: the `backend` parameter is replaced by the engine rules;
+  `analyze_gwas(backend = "GAPIT")` added.
+
 # bioana 0.3.0
 
 - `genotypes` is ready in `bioana_analyze()`: line means (BLUEs) of the
