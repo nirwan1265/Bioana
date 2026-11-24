@@ -126,8 +126,18 @@
     stop(sprintf("Model '%s': terms %s all map to layout column '%s'. Biodes should write one column per model term (or give analysis.terms.columns).",
                  model, paste(fixed_vars[col[fixed_vars] %in% dup], collapse = ", "), dup[1]), call. = FALSE)
   }
+  # level order declared by the spec (reference first): the factor whose name is the term's
+  # column, or the spec factor the term rule points to
+  levels <- list()
+  for (v in vars) {
+    r <- term_rules$terms[[v]]
+    k <- match(col[[v]], factor_names)
+    if (is.na(k) && !is.null(r$from_spec_factor) && length(factor_names) >= r$from_spec_factor) k <- r$from_spec_factor
+    lv <- if (!is.na(k)) unlist(spec$factors[[k]]$levels) else NULL
+    if (length(lv)) levels[[v]] <- as.character(lv)
+  }
   list(formula = f, response = all.vars(f[[2]]), fixed_labels = fixed_labels, random = random,
-       vars = vars, col = col, role = role, numeric = numeric_vars)
+       vars = vars, col = col, role = role, numeric = numeric_vars, levels = levels)
 }
 
 # Variables that appear inside I(...) in a formula.
@@ -153,7 +163,9 @@
       out[[v]] <- num
       next
     }
-    lev <- .ba_natural_sort(unique(x))
+    lev <- .ba_natural_sort(unique(x[!is.na(x)]))
+    # spec levels first (reference level first), then any level the spec does not list
+    if (length(parsed$levels[[v]])) lev <- c(intersect(parsed$levels[[v]], lev), setdiff(lev, parsed$levels[[v]]))
     out[[v]] <- factor(x, levels = lev)
   }
   out

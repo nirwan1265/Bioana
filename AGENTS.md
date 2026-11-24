@@ -132,6 +132,15 @@ DMR windows (FDR 0.06); m6A 2/40 (5 per group is little power for m6A);
 small RNA and microbiome 0 found (the real templates vary a lot between
 samples: signs right, r 0.75 and 0.42, but 5 per group is not enough).
 
+## Level order (2026-11-23, tell Simitall)
+
+`R/read_design.R` changed: `.ba_parse_model()` now returns `levels` (the spec
+factor's `levels`, reference first) and `.ba_frame()` orders factor levels by
+it, then natural order for unlisted levels. Before, levels were always natural
+order (so `trt` came before `untrt`). This file is a copy of Simitall's
+`R/suite_handoff.R`: the same change is needed there (`.suite_parse_model`,
+`.suite_frame`).
+
 ## User data: Biodes describes, Bioana analyses (proposed 2026-11-23)
 
 For a user's own data the flow is **Biodes -> Bioana**, no Simitall: Biodes

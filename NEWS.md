@@ -1,5 +1,12 @@
 # bioana 0.5.0
 
+- Real data: `bioana_example("airway")` (the DESeq2 vignette data set, shipped
+  in `inst/extdata/real/airway/`). Bioana's DESeq2 run equals the vignette code
+  (log2FC to 5e-9) and finds the known dexamethasone genes
+  (`test-real-airway.R`).
+- Factor levels follow `study_spec.json` `factors.levels` (reference first)
+  instead of alphabetical order; levels the spec does not list come after.
+
 - Only published packages run by default: `bioana_analyze(allow_fallback =
   FALSE)`. A data set without an installed engine stops and names the
   packages to install; Bioana's own code needs `allow_fallback = TRUE` (or

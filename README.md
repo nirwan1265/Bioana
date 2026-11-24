@@ -69,6 +69,14 @@ bioana_manifest_from_files(dir, c("featurecounts.txt", "genotypes.vcf"), assay =
 bioana_analyze(dir)
 ```
 
+A worked real example, the DESeq2 vignette's airway data (built the way
+Biodes' describe-my-data mode should write it):
+
+```r
+d <- bioana_example("airway")      # 4 cell lines x dexamethasone, Himes et al. 2014
+bioana_analyze(d, secondary = TRUE) # DESeq2 (= the vignette, checked in test-real-airway.R), edgeR as secondary
+```
+
 `bioana_manifest_from_files()` detects each file's format, converts it to
 Bioana's files under `<dir>/data/<id>/`, matches sample names to
 `sample_id` (BAM paths and tool suffixes are stripped), and writes

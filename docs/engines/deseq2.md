@@ -56,6 +56,29 @@ then the ones in Simitall's truth files. The parametrisation is the same as
 It runs the tutorial code above on the same counts and requires equal
 `log2FoldChange`, `lfcSE`, `pvalue` and `padj`.
 
+## Real-data check: airway (the vignette's own data set)
+
+`bioana_example("airway")` builds the design folder for the airway RNA-seq
+data: 4 cell lines x dexamethasone, Himes et al. 2014, GEO GSE52778. The
+design is an RCBD with cell line as block and untreated as reference, so the
+model is `y ~ treatment + block`, the vignette's `~ cell + dex`. The test is
+"airway: Bioana = the DESeq2 vignette code, and known dexamethasone genes go
+up" (`test-real-airway.R`). Results on DESeq2 1.42:
+
+- **Genes tested:** 14,332 after Bioana's CPM filter. 3,994 have padj < 0.05.
+- **Agreement with the vignette code** run directly on the same genes: log2
+  fold changes agree to 5e-9, p and padj to 4e-6, and the same genes are
+  removed by independent filtering.
+- **Agreement with the vignette's own pre-filter** (>= 10 reads in >= 3
+  samples; 16,596 genes, 2,618 up and 2,298 down at padj < 0.1): fold changes
+  for the 14,332 shared genes correlate at r = 0.99999.
+- **Known genes:** these glucocorticoid-response genes are all up with
+  padj < 1e-18: CRISPLD2 (the gene the paper names), DUSP1, FKBP5, TSC22D3,
+  KLF15, PER1 and ZBTB16 (log2FC 2.6 to 7.3).
+- **edgeR as the secondary:** fold changes correlate at r = 0.999. 3,938
+  genes are significant in both, 56 in DESeq2 only and 866 in edgeR only
+  (Jaccard 0.81).
+
 **Reference.** Love MI, Huber W, Anders S (2014). Moderated estimation of fold
 change and dispersion for RNA-seq data with DESeq2. *Genome Biology* 15:550.
 Vignette: "Analyzing RNA-seq data with DESeq2" (Bioconductor).
