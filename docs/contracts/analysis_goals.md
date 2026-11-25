@@ -52,7 +52,7 @@ Proposed entries (Biodes owns the final wording):
 "assumptions": {"analysis.goals": "assumed: interaction (the question asks whether the response over time differs between genotypes)"}
 ```
 
-Schema 0.6.x (Biodes 8132e0c, 0.6.2 at 4bcb848). Bioana accepts `handoff_version` 0.6.
+Schema 0.6.x (Biodes 8132e0c; 0.6.2 at 4bcb848; 0.6.3 at 2e747fe). Bioana accepts `handoff_version` 0.6.
 
 - `goals`: every goal the study answers, most important first. `primary_goal` is one of them;
   Biodes sizes the experiment for it (an interaction needs about 4× the replicates of a
@@ -73,8 +73,11 @@ Schema 0.6.x (Biodes 8132e0c, 0.6.2 at 4bcb848). Bioana accepts `handoff_version
   estimates on** (`engines.tsv` `estimate_scale`): outcome units for continuous outcomes, log2
   fold change for counts, log odds for binary, M-value for methylation. Bioana reports it as
   `effect_scale_used`. A trend size is present only when stated (per log10 unit when
-  log-scaled); otherwise it is absent and listed in `assumptions`.
-- `time_course` with `scope = "within_group"`, `group` (e.g. `"mutant"`) and `group_factor`
+  log-scaled); otherwise it is absent and listed in `assumptions`. `goal_effect.trend.per_unit`
+  ("kg N/ha", "log10 uM") is reported with the slope. The factor's `scale` decides log or not;
+  a `per_unit` that disagrees with it is flagged in the report.
+- `time_course` with `scope = "within_group"`, `group` (the exact level label, e.g. `"mutant"`; Biodes
+  drops `group`/`group_factor` when no level matches) and `group_factor`
   (e.g. `"genotype"`, a spec factor or model term): Bioana makes `group` the reference level
   of that term and jointly tests the time main-effect coefficients, i.e. time within that
   group (full model vs the model without that group's time effects). It needs the

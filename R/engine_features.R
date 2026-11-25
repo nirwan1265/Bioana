@@ -246,7 +246,7 @@
   if (!nrow(ft$table)) stop(ft$summary$method, call. = FALSE)
   ids <- intersect(design$meta$sample_id, colnames(inputs$values))
   list(table = ft$table, summary = ft$summary, warnings = ft$warnings,
-       call = sprintf("bioana:::.ba_feature_test(Y, meta, parsed_model); fixed terms %s", paste(deparse(stats::reformulate(design$parsed$fixed_labels)), collapse = "")),
+       call = sprintf("bioana:::.ba_feature_test(Y, meta, parsed_model); fixed terms %s", paste(deparse(stats::reformulate(c("1", design$parsed$fixed_labels))), collapse = "")),
        input = sprintf("%s, %d features", inputs$values_scale %||% "values", nrow(inputs$values)), n_units = ft$summary$n_samples,
        random = if (length(design$parsed$random)) sprintf("dropped: %s", paste(vapply(design$parsed$random, `[[`, "", "label"), collapse = ", ")) else NULL)
 }

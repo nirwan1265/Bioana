@@ -9,7 +9,7 @@
   ids <- intersect(meta$sample_id, colnames(Y))
   if (length(ids) < 3) stop(sprintf("Only %d samples of the data match sample_metadata sample_id.", length(ids)), call. = FALSE)
   frame <- .ba_frame(meta[match(ids, meta$sample_id), , drop = FALSE], p)
-  rhs <- stats::reformulate(p$fixed_labels)
+  rhs <- stats::reformulate(c("1", p$fixed_labels))
   ok_rows <- stats::complete.cases(frame[, intersect(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l)))), names(frame)), drop = FALSE])
   frame <- frame[ok_rows, , drop = FALSE]; ids <- ids[ok_rows]
   X <- stats::model.matrix(rhs, data = frame)

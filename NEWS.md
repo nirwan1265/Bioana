@@ -1,3 +1,10 @@
+# bioana 0.7.3
+
+- Models with no fixed terms (`y ~ (1 | entry)`, p-rep catalog) no longer fail: every fixed-part formula is
+  `reformulate(c("1", fixed_labels))` (design checks, outcome, features, linear test).
+- Biodes 0.6.3: `goal_effect.trend.per_unit` reported with the slope; the factor's `scale` decides log, and a
+  disagreeing `per_unit` is flagged. Exact level labels ("wild type", "mutant") for within-group time courses.
+
 # bioana 0.7.2
 
 - Biodes 0.6.2: trend on `log_base(x + log_offset)` from the spec factor (defaults in `goal_rules.json`:

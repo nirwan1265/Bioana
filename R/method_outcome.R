@@ -57,7 +57,7 @@
   d2$parsed$random <- lapply(.ba_findbars(f), function(b) list(label = paste(deparse(b[[3]]), collapse = ""), vars = all.vars(b[[3]]),
                                                                intercept_only = identical(paste(deparse(b[[2]]), collapse = ""), "1")))
   checks <- .ba_check_design(d2, meta = dat, what = "outcome")
-  col_term <- .ba_column_terms(stats::reformulate(p$fixed_labels), frame)
+  col_term <- .ba_column_terms(stats::reformulate(c("1", p$fixed_labels)), frame)
   plan <- .ba_goal_plan(goal, names(col_term), col_term, p)
   ch <- .ba_engine_chain(paste0("outcome:", type), d2, NULL, args$engine, args$allow_fallback, test = plan$test)
   rc <- .ba_run_chain(ch, function(eng) .ba_fit_outcome(eng, f, fixed_f, frame, type, p), "outcome")
@@ -66,7 +66,7 @@
   if (identical(plan$test, "lrt")) {
     # the reduced model: the same engine on the full model matrix without the goal's columns (a formula
     # without the terms would re-code the rest, e.g. treatment + treatment:time spans the full model)
-    rhs <- stats::reformulate(p$fixed_labels)
+    rhs <- stats::reformulate(c("1", p$fixed_labels))
     X <- stats::model.matrix(rhs, stats::model.frame(rhs, frame, na.action = stats::na.pass))
     X0 <- X[, !colnames(X) %in% c(plan$drop, "(Intercept)"), drop = FALSE]
     fr0 <- frame

@@ -38,7 +38,7 @@ bioana_check_design <- function(dir) {
   fr <- frame[ok, , drop = FALSE]; mt <- meta[ok, , drop = FALSE]
 
   # 1. estimability
-  X <- stats::model.matrix(stats::reformulate(p$fixed_labels), data = fr)
+  X <- stats::model.matrix(stats::reformulate(c("1", p$fixed_labels)), data = fr)
   q <- qr(X)
   if (q$rank < ncol(X)) {
     keep <- colnames(X)[q$pivot[seq_len(q$rank)]]

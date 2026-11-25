@@ -185,7 +185,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   fvars <- intersect(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l)))), names(frame))
   ok <- stats::complete.cases(frame[, fvars, drop = FALSE])
   frame <- frame[ok, , drop = FALSE]; ids <- ids[ok]
-  rhs <- stats::reformulate(p$fixed_labels)
+  rhs <- stats::reformulate(c("1", p$fixed_labels))
   X <- stats::model.matrix(rhs, data = frame)
   col_term <- .ba_column_terms(rhs, frame)
   qx <- qr(X)

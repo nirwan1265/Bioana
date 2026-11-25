@@ -137,7 +137,7 @@ trend_folder <- function(factor_extra = list(), effect = NULL, truth_x = NULL, s
              goals = list("trend"), primary_goal = "trend", goal_terms = list(trend = list("treatment")))
   if (!is.null(effect)) an$goal_effect <- list(trend = effect)
   spec <- list(handoff_version = "0.6.2", origin = "observed", organism = "test", system = "lab",
-               factors = list(c(list(name = "dose", n_levels = 4L, levels = as.list(lev), values = as.list(val), unit = "mg", scale = "log"), factor_extra)),
+               factors = list(utils::modifyList(list(name = "dose", n_levels = 4L, levels = as.list(lev), values = as.list(val), unit = "mg", scale = "log"), factor_extra)),
                design = list(chosen = "crd", reps = 4L), primary_outcome = list(name = "growth", type = "continuous"), analysis = an,
                assumptions = if (is.null(effect$size)) list(analysis.goal_effect.trend.size = "not stated"))
   jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
@@ -247,4 +247,52 @@ test_that("goal recovery for count features: share of Simitall's goal genes foun
   g <- DESeq2::results(dds)
   t <- r$results$rna[match(rownames(g), r$results$rna$feature_id), ]
   expect_equal(t$p, g$pvalue, tolerance = 1e-6)
+})
+
+test_that("trend per_unit: linear factor stays linear (levels that double), per_unit reported; a log per_unit on a linear factor is flagged", {
+  tf <- trend_folder(factor_extra = list(scale = "linear"), effect = list(size = 0.01, scale = "outcome", per_unit = "mg"))
+  utils::capture.output(r <- bioana_analyze(tf$dir, secondary = FALSE))
+  g <- r$summary$analyses$outcome$goal
+  expect_equal(g$predictor$scale, "linear"); expect_match(g$scale_note, "linear scale.*size per mg")
+  res <- r$results$outcome
+  expect_equal(res$estimate[res$term == "treatment"], unname(stats::coef(stats::lm(tf$grid$primary_outcome ~ tf$x))[2]), tolerance = 1e-8)
+  tf2 <- trend_folder(factor_extra = list(scale = "linear"), effect = list(size = 0.5, scale = "outcome", per_unit = "log10 mg"))
+  utils::capture.output(r2 <- bioana_analyze(tf2$dir, secondary = FALSE))
+  expect_match(r2$summary$analyses$outcome$goal$note, "does not match factor scale 'linear'")
+})
+
+test_that("within_group: Biodes' exact level label switches the reference; without group the test is over all groups", {
+  w <- within_folder()
+  s <- jsonlite::read_json(file.path(w$dir, "study_spec.json"))
+  s$factors[[1]]$levels <- list("wild type", "mutant")
+  jsonlite::write_json(s, file.path(w$dir, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  for (f in c("field_layout.csv", "sample_metadata_template.tsv")) {
+    x <- readLines(file.path(w$dir, f)); writeLines(gsub("\\bwt\\b", "wild type", x), file.path(w$dir, f))
+  }
+  utils::capture.output(r <- bioana_analyze(w$dir, only = "outcome", secondary = FALSE))
+  expect_equal(r$summary$analyses$outcome$goal$within$level, "mutant")
+  # Biodes 0.6.3: no level matched -> group and group_factor dropped, scope kept
+  s$analysis$goal_effect$time_course$group <- NULL; s$analysis$goal_effect$time_course$group_factor <- NULL
+  jsonlite::write_json(s, file.path(w$dir, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::capture.output(r <- bioana_analyze(w$dir, only = "outcome", secondary = FALSE))
+  g <- r$summary$analyses$outcome$goal
+  expect_null(g$within); expect_match(g$note, "names no group"); expect_equal(length(g$coefficients), 4)
+})
+
+test_that("a model with no fixed terms (p-rep catalog: y ~ (1 | entry)) runs", {
+  skip_if_not_installed("lme4")
+  d <- file.path(tempfile("prep_"), "design"); dir.create(d, recursive = TRUE)
+  grid <- data.frame(sample_id = sprintf("S%02d", 1:30), entry = sprintf("E%02d", rep(1:15, 2)), stringsAsFactors = FALSE)
+  set.seed(2); grid$primary_outcome <- 5 + stats::rnorm(15)[match(grid$entry, sprintf("E%02d", 1:15))] + stats::rnorm(30, 0, 0.5)
+  spec <- list(handoff_version = "0.6.3", origin = "observed", organism = "test", system = "field",
+               factors = list(list(name = "entry", n_levels = 15L)), design = list(chosen = "prep", reps = 2L),
+               primary_outcome = list(name = "yield", type = "continuous"),
+               analysis = list(model = "y ~ (1 | entry)", terms = list(entry = "entry", layout_columns = list("entry"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(grid[, c("sample_id", "entry")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(grid, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome"))
+  expect_no_error(bioana_check_design(d))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE))
+  expect_equal(r$summary$analyses$outcome$engine$engine, "lmer")
 })

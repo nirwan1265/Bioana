@@ -114,6 +114,14 @@ bioana_goals <- function() {
       goal$predictor <- list(scale = "linear")
       goal$scale_note <- sprintf("slope per%s of %s (linear scale)", if (nzchar(unit)) unit else " unit", tv)
     }
+    pu <- goal$effect$per_unit
+    if (!is.null(pu)) {
+      goal$scale_note <- sprintf("%s; goal_effect size per %s", goal$scale_note, pu)
+      log_pu <- grepl("^log", pu)
+      if (log_pu != identical(goal$predictor$scale, "log"))
+        goal$note <- paste(c(goal$note, sprintf("goal_effect.trend.per_unit '%s' does not match factor scale '%s': Bioana follows the factor scale",
+                                              pu, goal$predictor$scale)), collapse = "; ")
+    }
   }
   if (identical(goal$id, "time_course") && identical(goal$effect$scope, "within_group")) {
     w <- .ba_within_group(design$parsed, goal$effect, design$meta)
