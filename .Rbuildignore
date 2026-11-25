@@ -3,3 +3,4 @@
 ^CLAUDE\.md$
 ^\.github$
 ^docs$
+^install_bioana\.R$

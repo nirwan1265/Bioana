@@ -57,6 +57,18 @@ bioana_write_manifest("~/biodes_runs/my_design",
 bioana_analyze("~/biodes_runs/my_design")
 ```
 
+## Install
+
+```bash
+git clone https://github.com/nirwan1265/bioana && cd bioana
+Rscript install_bioana.R            # bioana + engines, readers, genetics (the "analysis" profile)
+Rscript install_bioana.R full       # + plots and test tools;  "suite" adds Simitall
+```
+
+Or from R: `bioana_install_dependencies("analysis")`, and `bioana_check_dependencies()` to see
+what is missing. Every package Bioana uses, with its source (CRAN, Bioconductor, GitHub) and what it is
+for, is in `inst/rules/requirements.tsv`.
+
 ## Your own data
 
 For real data the flow is **Biodes -> Bioana** (Simitall is not needed).

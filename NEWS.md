@@ -1,5 +1,9 @@
 # bioana 0.5.0
 
+- `inst/rules/requirements.tsv`: every package Bioana uses (source, profile, what for);
+  `bioana_check_dependencies()`, `bioana_install_dependencies()` (profiles minimal, analysis, full,
+  suite), and `install_bioana.R` at the top of the repo.
+
 - Real data: `bioana_example("airway")` (the DESeq2 vignette data set, shipped
   in `inst/extdata/real/airway/`). Bioana's DESeq2 run equals the vignette code
   (log2FC to 5e-9) and finds the known dexamethasone genes

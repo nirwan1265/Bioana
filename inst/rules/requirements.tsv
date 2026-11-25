@@ -1,0 +1,30 @@
+package	source	profile	used_for
+jsonlite	CRAN	core	design folders, manifests, summaries (Imports)
+Matrix	CRAN	core	sparse matrices (Imports)
+DESeq2	Bioconductor	engines	counts, fixed designs (rank 1)
+edgeR	Bioconductor	engines	counts, peaks, windows; IP x input model; TMM for limma-voom and dream
+limma	Bioconductor	engines	limma-voom, limma on M-values and log ratios, duplicateCorrelation
+variancePartition	Bioconductor	engines	dream: counts with random terms (repeated or nested units)
+DSS	Bioconductor	engines	bisulfite counts (beta-binomial)
+bsseq	Bioconductor	engines	BSseq objects for DSS
+GenomeInfoDb	Bioconductor	engines	DSS results (seqnames)
+BiocGenerics	Bioconductor	engines	DSS results (start)
+lme4	CRAN	engines	outcome mixed models (glmer, glmer.nb)
+lmerTest	CRAN	engines	outcome lmer with Satterthwaite df
+reformulas	CRAN	engines	random-term parsing for mixed models
+glmmTMB	CRAN	engines	outcome secondary engine (gaussian, binomial, nbinom2)
+MASS	CRAN	engines	glm.nb (count outcomes), polr fallback
+ordinal	CRAN	engines	clm / clmm (ordinal outcomes)
+survival	CRAN	engines	coxph (survival outcomes)
+Rsubread	Bioconductor	readers	featureCounts on BAM files
+Rsamtools	Bioconductor	readers	BAM flags and read lengths
+tximport	Bioconductor	readers	Salmon / kallisto to gene counts
+rrBLUP	CRAN	genetics	GWAS on line means (rank 1); kinship
+GAPIT	GitHub:jiabowang/GAPIT	genetics	GWAS secondary engine (MLM)
+BGLR	CRAN	genetics	genomic prediction (Bayesian models)
+ranger	CRAN	genetics	genomic prediction (random forest)
+ggplot2	CRAN	plots	plot_* functions
+patchwork	CRAN	plots	multi-panel plots
+devtools	CRAN	dev	load_all, test, document
+testthat	CRAN	dev	tests
+simitall	GitHub:nirwan1265/simitall	suite	Simitall end-to-end tests (optional)

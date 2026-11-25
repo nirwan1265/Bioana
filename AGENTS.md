@@ -101,6 +101,12 @@ model-matrix column names (`treatmenttreatment_2`).
 | `inst/rules/handoff.json`, `model_terms.json` | Biodes contract (supported handoff versions, model-term vocabulary); copies of Simitall's |
 | `tests/testthat/` | `test-analyze.R`: synthetic data in a fixture RCBD folder (no Biodes or Simitall needed); `test-gwas-selection.R`, `test-legacy-analyses.R`: the tests moved with the functions, which simulate with Simitall (skipped without it) |
 
+## Packages
+
+Every package Bioana calls is a row of `inst/rules/requirements.tsv`
+(`test-dependencies.R` fails otherwise). Add the row with a new engine or
+reader; `bioana_install_dependencies()` and `install_bioana.R` read it.
+
 ## Adding an engine
 
 1. A row in `inst/rules/engines.tsv` (package, requires, input kind, calls,
