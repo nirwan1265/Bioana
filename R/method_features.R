@@ -33,6 +33,11 @@
 
 # Counts per feature: the engine chain (DESeq2 / edgeR / limma-voom / dream, native log-CPM fallback).
 .ba_count_inputs <- function(m, args, what = "log2 CPM") {
+  v <- m[is.finite(m)]
+  if (any(v < 0) || any(abs(v - round(v)) > 1e-6)) {
+    stop("Count check failed: the count matrix has negative or non-whole values (e.g. ", v[v < 0 | abs(v - round(v)) > 1e-6][1],
+         "). The count engines need raw read counts, not normalised values (CPM, TPM, FPKM).", call. = FALSE)
+  }
   lc <- .ba_logcpm(m, args$min_cpm %||% 1)
   list(inputs = list(counts = m[rownames(lc$y), , drop = FALSE], values = lc$y, values_scale = what), dropped = lc$dropped)
 }

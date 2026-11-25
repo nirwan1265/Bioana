@@ -1,0 +1,11 @@
+{
+  "_about": "Pre-analysis design checks (R/design_checks.R, bioana_check_design()). A check with status 'stop' prevents the analysis; 'warn' is reported in summary$diagnostics and the report line.",
+  "subject_pattern": "^(subject|subject_id|individual|individual_id|animal|animal_id|plant|plant_id|patient|patient_id|donor|donor_id|mouse|mouse_id|tree|tree_id|pot|pot_id|unit_id|biological_replicate|bio_rep)$",
+  "_note_subject_pattern": "sample-metadata columns that name the biological unit. If one repeats across samples and is not in a random term of analysis.model: samples that differ in a fixed term (time, treatment) are repeated measures of one unit -> stop; samples that do not differ are technical replicates -> stop for omics data (sum or average them first), allowed for the outcome when declared as unit_id (subsamples are averaged or nested).",
+  "min_residual_df": 3,
+  "_note_min_residual_df": "fewer residual degrees of freedom than this -> warn; none -> stop",
+  "min_units_per_level": 2,
+  "_note_min_units_per_level": "a treatment level with fewer distinct experimental units -> warn (its effect rests on the variance of the other levels)",
+  "min_random_levels": 5,
+  "_note_min_random_levels": "a random term with fewer levels -> warn (its variance is poorly estimated; a fixed effect may be better)"
+}

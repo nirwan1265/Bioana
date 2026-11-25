@@ -27,6 +27,17 @@ it did so you can rerun it yourself.
 - Pick an engine yourself:
   `bioana_analyze(dir, params = list(feature_counts = list(engine = "edger")))`.
 
+## How well an engine fits the design
+
+`engine_selection.tsv` has a `design_fit` column per row: `full` (the engine fits the
+design as written), `approx` (it approximates it: limma duplicateCorrelation for one
+random intercept, a gamma frailty for one random term in a Cox model), `drops_random`
+(it would ignore the random terms; only with `allow_fallback = TRUE`). `engines.tsv`
+has `max_random` (`0`, `1` = one random intercept, `any`): an engine that cannot hold
+the design's random terms is skipped. After a runtime failure, only an engine with
+`design_fit = full` may take over; otherwise the analysis stops. The provenance block
+records `design_fit` and, for approximations, what is approximated.
+
 ## The provenance block
 
 Every data set in `bioana/bioana_summary.json` has an `engine` block with:

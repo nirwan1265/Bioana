@@ -2,8 +2,10 @@
 # family the outcome type calls for. Continuous: lm / lmer. Binary: glm /
 # glmer (binomial). Count: negative binomial glm (MASS) / glmer.nb. Ordinal:
 # cumulative logit, ordinal::clm / clmm (MASS::polr without random terms when
-# ordinal is missing). Survival: Cox model (survival::coxph) on time + event,
-# random terms as frailty-free strata are dropped with a warning.
+# ordinal is missing, fixed designs only). Survival: Cox model (survival::coxph);
+# with random terms coxme, or one random intercept as a gamma frailty. The engine
+# chain (engine_selection.tsv) picks the fit; nothing drops random terms unless
+# allow_fallback = TRUE.
 
 .ba_method_outcome <- function(entry, design, outdir, alpha = 0.05, args = list()) {
   p <- design$parsed; spec <- design$spec; meta <- design$meta
@@ -42,49 +44,29 @@
   }
   frame <- .ba_frame(dat, p)
   if (type == "survival") frame$event_ <- dat$event_
+  .ba_check_outcome_values(frame$y_, frame$event_, type, col)
+  if (type == "ordinal") frame$y_ <- factor(frame$y_, ordered = TRUE)
   has_random <- length(.ba_findbars(f)) > 0
   fixed_f <- .ba_nobars(f)
-  ch <- .ba_engine_chain(paste0("outcome:", type), design, NULL, args$engine, args$allow_fallback)
-  eng <- ch$chain[1]
-  fit <- if (identical(eng, "glmmtmb")) {
-    if (!type %in% c("continuous", "binary", "count")) stop(sprintf("glmmTMB is set up for continuous, binary and count outcomes, not %s.", type), call. = FALSE)
-    glmmTMB::glmmTMB(f, data = frame, family = switch(type, continuous = stats::gaussian(), binary = stats::binomial(), count = glmmTMB::nbinom2()))
-  } else switch(type,
-    continuous = {
-      n_fixed <- ncol(stats::model.matrix(stats::reformulate(c("1", p$fixed_labels)), data = frame))
-      max_sat <- .ba_rules("handoff")$satterthwaite_max_fixed_coefficients %||% Inf
-      if (has_random && n_fixed > max_sat) warn <- c(warn, sprintf("%d fixed coefficients: lme4 without Satterthwaite df", n_fixed))
-      if (has_random) {
-        if (n_fixed <= max_sat && requireNamespace("lmerTest", quietly = TRUE)) lmerTest::lmer(f, data = frame) else lme4::lmer(f, data = frame)
-      } else stats::lm(f, data = frame)
-    },
-    binary = if (has_random) lme4::glmer(f, data = frame, family = stats::binomial()) else stats::glm(fixed_f, data = frame, family = stats::binomial()),
-    count = {
-      if (!requireNamespace("MASS", quietly = TRUE)) stop("count outcomes need MASS", call. = FALSE)
-      if (has_random) lme4::glmer.nb(f, data = frame) else MASS::glm.nb(fixed_f, data = frame)
-    },
-    ordinal = {
-      frame$y_ <- factor(frame$y_, ordered = TRUE)
-      if (requireNamespace("ordinal", quietly = TRUE)) {
-        if (has_random) ordinal::clmm(f, data = frame) else ordinal::clm(fixed_f, data = frame)
-      } else {
-        if (has_random) warn <- c(warn, "random terms dropped: install 'ordinal' to fit them (clmm)")
-        MASS::polr(fixed_f, data = frame, Hess = TRUE)
-      }
-    },
-    survival = {
-      if (!requireNamespace("survival", quietly = TRUE)) stop("survival outcomes need the survival package", call. = FALSE)
-      if (has_random) warn <- c(warn, "random terms dropped for the Cox model (no frailty fitted)")
-      sf <- stats::as.formula(paste("survival::Surv(y_, event_) ~", paste(p$fixed_labels, collapse = " + ")))
-      survival::coxph(sf, data = frame)
-    },
-    stop(sprintf("No outcome analysis for type '%s'.", type), call. = FALSE))
-  if (!identical(eng, "glmmtmb")) {
-    # the engine the rules name for this type and design is the one the switch above fitted
-    eng <- .ba_selection_rows(paste0("outcome:", type), if (has_random) "random" else "fixed")$engine[1]
-    if (inherits(fit, "polr")) warn <- c(warn, "ordinal not installed: MASS::polr fitted instead of ordinal::clm")
+  # the chain sees the random terms of the formula actually fitted (nested subsamples add one)
+  d2 <- design
+  d2$parsed$random <- lapply(.ba_findbars(f), function(b) list(label = paste(deparse(b[[3]]), collapse = ""), vars = all.vars(b[[3]]),
+                                                               intercept_only = identical(paste(deparse(b[[2]]), collapse = ""), "1")))
+  checks <- .ba_check_design(d2, meta = dat, what = "outcome")
+  ch <- .ba_engine_chain(paste0("outcome:", type), d2, NULL, args$engine, args$allow_fallback)
+  rc <- .ba_run_chain(ch, function(eng) .ba_fit_outcome(eng, f, fixed_f, frame, type, p), "outcome")
+  fit <- rc$result; eng <- rc$engine
+  if (length(rc$failed)) warn <- c(warn, sprintf("engine %s failed (%s); used %s, which fits the design fully", names(rc$failed), unlist(rc$failed), eng))
+  if (identical(ch$fit[[eng]], "drops_random")) warn <- c(warn, sprintf("random terms dropped by %s (allow_fallback = TRUE): %s", eng, paste(.ba_random_labels(d2$parsed), collapse = ", ")))
+  diag_engine <- list()
+  if (has_random && inherits(fit, "merMod") && lme4::isSingular(fit)) {
+    warn <- c(warn, "singular fit: a random-effect variance was estimated as ~0")
+    diag_engine$singular <- TRUE
   }
-  if (has_random && inherits(fit, "merMod") && lme4::isSingular(fit)) warn <- c(warn, "singular fit: a random-effect variance was estimated as ~0")
+  if (inherits(fit, "glmmTMB") && !isTRUE(fit$sdr$pdHess)) {
+    warn <- c(warn, "glmmTMB: the Hessian is not positive definite (convergence problem)")
+    diag_engine$pdHess <- FALSE
+  }
   res <- .ba_coef_table(fit, type, frame, p)
   res$role <- vapply(res$term, function(t) .ba_coef_role(t, p), "")
   res$padj <- NA_real_
@@ -102,9 +84,10 @@
                   model_fitted = if (type == "survival") paste(deparse(stats::formula(fit)), collapse = "") else paste(deparse(stats::formula(fit)), collapse = ""),
                   n_rows = nrow(meta), n_units_fitted = nrow(frame), subsamples = if (has_subs) subsamples else "none",
                   dropped_samples = meta$sample_id[is.na(y)],
-                  engine = .ba_provenance(eng, design, tryCatch(paste(deparse(stats::getCall(fit)), collapse = " "), error = function(e) class(fit)[1]),
+                  engine = .ba_provenance(eng, d2, tryCatch(paste(deparse(stats::getCall(fit)), collapse = " "), error = function(e) class(fit)[1]),
                                           sprintf("%s outcome '%s', %d units", type, col, nrow(frame)), nrow(frame), ch,
                                           formula = paste(deparse(f), collapse = "")),
+                  diagnostics = .ba_diagnostics(checks, rc$fit_warnings, if (length(diag_engine)) diag_engine),
                   secondary_engine = .ba_secondary_engine(ch$chain, eng),
                   anova = if (is.null(aov)) NULL else lapply(split(cbind(term = rownames(aov), aov), seq_len(nrow(aov))), as.list),
                   warnings = warn)
@@ -123,9 +106,16 @@
 # Coefficient table (term, estimate, se, df, statistic, p) for every supported fit.
 .ba_coef_table <- function(fit, type, frame, p) {
   if (type == "survival") {
-    co <- summary(fit)$coefficients
-    return(data.frame(term = rownames(co), estimate = co[, "coef"], se = co[, "se(coef)"], df = Inf,
-                      statistic = co[, "z"], p = co[, "Pr(>|z|)"], stringsAsFactors = FALSE, row.names = NULL))
+    if (inherits(fit, "coxme")) {
+      b <- coxme::fixef(fit); se <- sqrt(diag(as.matrix(stats::vcov(fit))))
+    } else {
+      co <- summary(fit)$coefficients
+      co <- co[!grepl("frailty\\(", rownames(co)), , drop = FALSE]      # the frailty term is not a fixed coefficient
+      b <- stats::setNames(co[, "coef"], rownames(co)); se <- co[, "se(coef)"]
+    }
+    z <- b / se
+    return(data.frame(term = names(b), estimate = unname(b), se = unname(se), df = Inf, statistic = unname(z),
+                      p = 2 * stats::pnorm(-abs(unname(z))), stringsAsFactors = FALSE, row.names = NULL))
   }
   if (inherits(fit, c("clm", "clmm", "polr"))) {
     co <- if (inherits(fit, "polr")) {
@@ -204,4 +194,52 @@
     detected = if (any(nz)) round(mean(tab$detected[nz]), 3) else NA,
     false_positives = sum(!nz & tab$p < alpha),
     rank_cor = if (nrow(tab) > 2 && stats::sd(tab$true) > 0) round(stats::cor(s * tab$estimate, tab$true, method = "spearman"), 3) else NA))
+}
+
+# One outcome fit per engine id (inst/rules/engines.tsv); the chain decides which.
+.ba_fit_outcome <- function(eng, f, fixed_f, frame, type, p) {
+  bars <- vapply(.ba_findbars(f), function(b) paste0("(", paste(deparse(b), collapse = ""), ")"), "")
+  surv_rhs <- function(extra = character()) stats::as.formula(paste("survival::Surv(y_, event_) ~", paste(c(p$fixed_labels, extra), collapse = " + ")))
+  switch(eng,
+    stats_lm = stats::lm(fixed_f, data = frame),
+    lmer = {
+      n_fixed <- ncol(stats::model.matrix(stats::reformulate(c("1", p$fixed_labels)), data = frame))
+      max_sat <- .ba_rules("handoff")$satterthwaite_max_fixed_coefficients %||% Inf
+      if (n_fixed <= max_sat && requireNamespace("lmerTest", quietly = TRUE)) lmerTest::lmer(f, data = frame) else lme4::lmer(f, data = frame)
+    },
+    glm_binomial = stats::glm(fixed_f, data = frame, family = stats::binomial()),
+    glmer_binomial = lme4::glmer(f, data = frame, family = stats::binomial()),
+    glm_nb = MASS::glm.nb(fixed_f, data = frame),
+    glmer_nb = lme4::glmer.nb(f, data = frame),
+    clm = if (length(bars)) ordinal::clmm(f, data = frame) else ordinal::clm(fixed_f, data = frame),
+    polr = MASS::polr(fixed_f, data = frame, Hess = TRUE),
+    coxph = survival::coxph(surv_rhs(), data = frame),
+    coxph_frailty = {
+      g <- all.vars(.ba_findbars(f)[[1]][[3]])
+      frame$frailty_g_ <- interaction(frame[g], drop = TRUE)
+      survival::coxph(surv_rhs("survival::frailty(frailty_g_)"), data = frame)
+    },
+    coxme = coxme::coxme(surv_rhs(bars), data = frame),
+    glmmtmb = {
+      if (!type %in% c("continuous", "binary", "count")) stop(sprintf("glmmTMB is set up for continuous, binary and count outcomes, not %s.", type), call. = FALSE)
+      glmmTMB::glmmTMB(f, data = frame, family = switch(type, continuous = stats::gaussian(), binary = stats::binomial(), count = glmmTMB::nbinom2()))
+    },
+    stop(sprintf("No outcome fit for engine '%s'.", eng), call. = FALSE))
+}
+
+# The values must be what the outcome type says they are.
+.ba_check_outcome_values <- function(y, event, type, col) {
+  v <- y[!is.na(y)]
+  bad <- switch(type,
+    binary = if (!all(v %in% c(0, 1))) sprintf("a binary outcome must be 0/1; '%s' has %s", col, paste(utils::head(setdiff(unique(v), c(0, 1)), 3), collapse = ", ")),
+    count = if (any(v < 0 | abs(v - round(v)) > 1e-8)) sprintf("a count outcome must be non-negative whole numbers; '%s' has e.g. %s", col, v[v < 0 | abs(v - round(v)) > 1e-8][1]),
+    ordinal = if (length(unique(v)) < 2) sprintf("an ordinal outcome needs at least 2 categories; '%s' has %d", col, length(unique(v))),
+    survival = {
+      e <- event[!is.na(event)]
+      if (any(v < 0)) sprintf("survival times must be >= 0; '%s' has %s", col, min(v))
+      else if (!all(e %in% c(0, 1))) "the event column must be 0 (censored) or 1 (event)"
+    },
+    NULL)
+  if (!is.null(bad)) stop("Outcome check failed: ", bad, call. = FALSE)
+  invisible(TRUE)
 }

@@ -30,16 +30,11 @@
   n_pcs <- .ba_gwas_n_pcs(args$n_pcs %||% "auto", design)
   ch <- .ba_engine_chain("genotypes", design, NULL, args$engine, args$allow_fallback)
   backends <- c(rrblup = "rrBLUP", gapit_mlm = "GAPIT", bioana_emmax = "native")
-  failed <- list()
-  for (eng in ch$chain) {
-    gw <- tryCatch(analyze_gwas(vcf, means[in_vcf & is.finite(means$mean), c("line", "mean")], file.path(outdir, "gwas"),
-                                trait = "mean", sample_id = "line", n_pcs = n_pcs, min_maf = args$min_maf %||% 0.05,
-                                fdr_threshold = alpha, backend = backends[[eng]]), error = function(e) e)
-    if (!inherits(gw, "error")) break
-    failed[[eng]] <- conditionMessage(gw)
-  }
-  if (inherits(gw, "error")) stop("Every GWAS engine failed: ", paste(names(failed), unlist(failed), sep = ": ", collapse = "; "), call. = FALSE)
-  ch$skipped <- c(ch$skipped, lapply(failed, function(m) paste("failed:", m)))
+  rc <- .ba_run_chain(ch, function(eng) analyze_gwas(vcf, means[in_vcf & is.finite(means$mean), c("line", "mean")], file.path(outdir, "gwas"),
+                                                     trait = "mean", sample_id = "line", n_pcs = n_pcs, min_maf = args$min_maf %||% 0.05,
+                                                     fdr_threshold = alpha, backend = backends[[eng]]), "genotypes")
+  gw <- rc$result; eng <- rc$engine
+  ch$skipped <- c(ch$skipped, lapply(rc$failed, function(m) paste("failed:", m)))
   g <- gw$results
   res <- data.frame(marker_id = g$marker_id, seqname = g$seqname, pos = g$pos, estimate = g$beta, se = g$se,
                     p = g$p_value, padj = g$q_value, maf = g$maf, significant = g$significant, stringsAsFactors = FALSE)
@@ -57,7 +52,8 @@
                                           sprintf("line means of %d lines; %d markers in %s", sum(in_vcf & is.finite(means$mean)), nrow(gt$genotype), entry$files$vcf),
                                           sum(in_vcf & is.finite(means$mean)), ch,
                                           random = sprintf("line means are BLUEs from %s; kinship random effect in the scan", lm_out$model)),
-                  secondary_engine = .ba_secondary_engine(ch$chain, eng))
+                  secondary_engine = .ba_secondary_engine(ch$chain, eng),
+                  diagnostics = .ba_diagnostics(NULL, rc$fit_warnings, list(line_means = lm_out$diagnostics)))
   truth <- .ba_qtn_truth(entry, design$dir)
   rec <- NULL
   if (!is.null(truth)) {
@@ -164,7 +160,7 @@
                       n_units = as.integer(n_units[rownames(L)]), stringsAsFactors = FALSE)
   means <- means[means$n_units > 0, , drop = FALSE]
   rownames(means) <- NULL
-  list(means = means, fit = fit, model = out$summary$model_fitted, warnings = warn)
+  list(means = means, fit = fit, model = out$summary$model_fitted, warnings = warn, diagnostics = out$summary$diagnostics)
 }
 
 # QTN truth (kind qtn) or NULL.

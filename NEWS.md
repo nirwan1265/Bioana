@@ -1,3 +1,18 @@
+# bioana 0.6.0
+
+- Design checks before every analysis (`bioana_check_design()`, `inst/rules/design_checks.json`):
+  stop on a confounded treatment, no residual df, repeated subjects without a random term,
+  technical replicates, unidentifiable random terms, normalised values given as counts, outcome
+  values that do not match the type; warn on thin replication and few random-term levels.
+- No silent substitution: `design_fit` (full / approx / drops_random) per engine row and
+  `max_random` per engine. An engine that cannot hold the random terms is skipped; after a runtime
+  failure only an engine that fits the design fully takes over; approximations are marked in the
+  report and provenance; dropping random terms needs `allow_fallback = TRUE`.
+- Fit diagnostics: warnings raised while fitting, singular fits, DESeq2 non-converged genes,
+  glmmTMB Hessian, in `summary$diagnostics` and the report.
+- Survival outcomes with random terms: `coxme`, or a gamma frailty Cox model as an approximation;
+  `polr` is an engine (fixed designs).
+
 # bioana 0.5.0
 
 - `inst/rules/requirements.tsv`: every package Bioana uses (source, profile, what for);

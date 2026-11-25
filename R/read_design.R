@@ -81,7 +81,8 @@
   bars <- .ba_findbars(f)
   random <- lapply(bars, function(b) {
     g <- b[[3]]
-    list(label = paste(deparse(g), collapse = ""), vars = all.vars(g))
+    list(label = paste(deparse(g), collapse = ""), vars = all.vars(g),
+         intercept_only = identical(paste(deparse(b[[2]]), collapse = ""), "1"))
   })
   vars <- setdiff(all.vars(f), all.vars(f[[2]]))
   factor_names <- vapply(spec$factors %||% list(), function(x) x$name %||% "", "")

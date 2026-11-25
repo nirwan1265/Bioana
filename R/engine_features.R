@@ -15,10 +15,10 @@
   if (exists("normLibSizes", envir = ns)) edgeR::normLibSizes(y) else edgeR::calcNormFactors(y)
 }
 
-.ba_engine_result <- function(tab, d, method, alpha, call, input, warnings = character(), random = NULL) {
+.ba_engine_result <- function(tab, d, method, alpha, call, input, warnings = character(), random = NULL, diagnostics = NULL) {
   rownames(tab) <- NULL
   list(table = tab, summary = .ba_engine_summary(tab, d, method, alpha), call = call, input = input,
-       n_units = length(d$ids), warnings = warnings, random = random)
+       n_units = length(d$ids), warnings = warnings, random = random, diagnostics = diagnostics)
 }
 
 .ba_no_random <- function(d, engine) {
@@ -40,10 +40,13 @@
     data.frame(feature_id = rownames(r), contrast = cf, estimate = r$log2FoldChange, se = r$lfcSE,
                statistic = r$stat, p = r$pvalue, padj = r$padj, stringsAsFactors = FALSE)
   }))
+  nc <- sum(!S4Vectors::mcols(dds)$betaConv, na.rm = TRUE)
   .ba_engine_result(tab, d, "DESeq2 negative-binomial GLM, Wald test", alpha,
                     sprintf("DESeq2::DESeq(DESeqDataSetFromMatrix(counts, colData, design = ~1), full = model.matrix(%s)); DESeq2::results(dds, name = <coefficient>, alpha = %g)",
                             paste(deparse(d$rhs), collapse = ""), alpha),
-                    sprintf("raw integer counts, %d features x %d units", nrow(cnt), ncol(cnt)))
+                    sprintf("raw integer counts, %d features x %d units", nrow(cnt), ncol(cnt)),
+                    warnings = if (nc) sprintf("DESeq2: %d features did not converge (betaConv FALSE)", nc) else character(),
+                    diagnostics = list(non_converged = nc))
 }
 
 # edgeR: TMM, NB dispersions, quasi-likelihood F test per treatment coefficient.

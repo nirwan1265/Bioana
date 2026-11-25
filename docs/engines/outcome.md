@@ -8,8 +8,8 @@ The primary outcome is fitted with the formula Biodes wrote
 | continuous | `stats::lm` (`stats_lm`) | `lmerTest::lmer`, Satterthwaite df (`lmer`) | glmmTMB (gaussian) |
 | binary | `stats::glm(binomial)` (`glm_binomial`) | `lme4::glmer(binomial)` (`glmer_binomial`) | glmmTMB (binomial) |
 | count | `MASS::glm.nb` (`glm_nb`) | `lme4::glmer.nb` (`glmer_nb`) | glmmTMB (`nbinom2`) |
-| ordinal | `ordinal::clm` (`clm`) | `ordinal::clmm` | none |
-| survival | `survival::coxph` (`coxph`) | random terms dropped, with a warning | none |
+| ordinal | `ordinal::clm` (`clm`), `MASS::polr` (`polr`) | `ordinal::clmm`; `polr` only with `allow_fallback = TRUE` | polr |
+| survival | `survival::coxph` (`coxph`) | `coxme::coxme` (`coxme`); without coxme, one random intercept as a gamma frailty, `coxph(... + frailty(g))` (`coxph_frailty`, approximation); `coxph` without the random terms only with `allow_fallback = TRUE` | none |
 
 Treatment coefficients are adjusted with Benjamini-Hochberg. Subsamples of one
 experimental unit are averaged (`subsamples = "aggregate"`, default) or nested

@@ -140,8 +140,17 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
       paste0("; truth: ", paste(vapply(rec, function(r) sprintf("%s found %d/%d (FDR %s)", r$contrast, r$true_positives, r$true_changes, r$fdr), ""), collapse = ", "))
     }
     eng <- a$engine
-    etxt <- if (is.null(eng)) "" else sprintf(" [%s %s%s]", eng$package, eng$version, if (isTRUE(eng$fallback_used)) ", FALLBACK" else "")
+    etxt <- if (is.null(eng)) "" else sprintf(" [%s %s%s%s]", eng$package, eng$version, if (isTRUE(eng$fallback_used)) ", FALLBACK" else "",
+                                              switch(eng$design_fit %||% "full", approx = ", approximates the design", drops_random = ", RANDOM TERMS DROPPED", ""))
     cat(sprintf("  [%s]%s %s%s\n", id, etxt, line, rtxt))
+    dg <- a$diagnostics
+    if (!is.null(dg)) {
+      cw <- Filter(function(x) identical(x$status, "warn"), dg$checks)
+      if (length(cw) || length(dg$fit_warnings)) {
+        cat(sprintf("      check: %s\n", vapply(cw, `[[`, "", "detail")), sep = "")
+        if (length(dg$fit_warnings)) cat(sprintf("      fit: %d warning(s), e.g. %s\n", length(dg$fit_warnings), substr(dg$fit_warnings[[1]], 1, 120)))
+      }
+    }
     sec <- a[["secondary"]]
     if (!is.null(sec$concordance)) {
       cc <- sec$concordance

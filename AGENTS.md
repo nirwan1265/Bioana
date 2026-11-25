@@ -101,6 +101,21 @@ model-matrix column names (`treatmenttreatment_2`).
 | `inst/rules/handoff.json`, `model_terms.json` | Biodes contract (supported handoff versions, model-term vocabulary); copies of Simitall's |
 | `tests/testthat/` | `test-analyze.R`: synthetic data in a fixture RCBD folder (no Biodes or Simitall needed); `test-gwas-selection.R`, `test-legacy-analyses.R`: the tests moved with the functions, which simulate with Simitall (skipped without it) |
 
+## Safeguards (2026-11-25)
+
+- `R/design_checks.R` + `inst/rules/design_checks.json`: checks before every data set
+  (estimability/confounding, residual df, units per level, repeated subjects without a
+  random term, technical replicates, unidentifiable random terms); stop or warn.
+  `bioana_check_design(dir)` exposes them.
+- `engine_selection.tsv` `design_fit` (full / approx / drops_random) and `engines.tsv`
+  `max_random` (0 / 1 / any). `.ba_run_chain()` runs every chain (features, outcome,
+  genotypes): after a runtime failure only a `full` engine may take over; warnings
+  raised during fitting are collected into `summary$diagnostics`.
+- Outcome fits go by engine id (`.ba_fit_outcome()`); new engines `coxme`,
+  `coxph_frailty`, `polr`.
+- `R/read_design.R` (copy of Simitall's `suite_handoff.R`): random terms now carry
+  `intercept_only`. Tell Simitall (same change in `.suite_parse_model`).
+
 ## Packages
 
 Every package Bioana calls is a row of `inst/rules/requirements.tsv`

@@ -2,6 +2,7 @@ package	source	profile	used_for
 jsonlite	CRAN	core	design folders, manifests, summaries (Imports)
 Matrix	CRAN	core	sparse matrices (Imports)
 DESeq2	Bioconductor	engines	counts, fixed designs (rank 1)
+S4Vectors	Bioconductor	engines	DESeq2 convergence flags (mcols)
 edgeR	Bioconductor	engines	counts, peaks, windows; IP x input model; TMM for limma-voom and dream
 limma	Bioconductor	engines	limma-voom, limma on M-values and log ratios, duplicateCorrelation
 variancePartition	Bioconductor	engines	dream: counts with random terms (repeated or nested units)
@@ -15,7 +16,8 @@ reformulas	CRAN	engines	random-term parsing for mixed models
 glmmTMB	CRAN	engines	outcome secondary engine (gaussian, binomial, nbinom2)
 MASS	CRAN	engines	glm.nb (count outcomes), polr fallback
 ordinal	CRAN	engines	clm / clmm (ordinal outcomes)
-survival	CRAN	engines	coxph (survival outcomes)
+survival	CRAN	engines	coxph (survival outcomes), frailty
+coxme	CRAN	engines	mixed-effects Cox model (survival with repeated or clustered units)
 Rsubread	Bioconductor	readers	featureCounts on BAM files
 Rsamtools	Bioconductor	readers	BAM flags and read lengths
 tximport	Bioconductor	readers	Salmon / kallisto to gene counts

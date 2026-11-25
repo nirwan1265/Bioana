@@ -63,18 +63,31 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
 # Ordered engines to try. `inputs` = the input kinds the data type can give (counts, values, ...).
 .ba_engine_chain <- function(key, design, inputs = NULL, override = NULL, allow_fallback = FALSE) {
   e <- .ba_tsv("engines")
-  s <- .ba_selection_rows(key, .ba_design_kind(design$parsed))
+  p <- design$parsed
+  kind <- .ba_design_kind(p)
+  s <- .ba_selection_rows(key, kind)
   if (!nrow(s)) stop(sprintf("No engine rows for '%s' in engine_selection.tsv.", key), call. = FALSE)
   chain <- s$engine
+  fit <- stats::setNames(s$design_fit, s$engine)
   if (!is.null(override)) {
     if (!override %in% e$engine) stop(sprintf("Unknown engine '%s'; see bioana_engines().", override), call. = FALSE)
     chain <- unique(c(override, chain))
+    if (is.na(fit[override])) fit[override] <- .ba_design_fit_of(e[e$engine == override, ], p)
   }
   skipped <- list()
   keep <- character()
   for (x in chain) {
     row <- e[e$engine == x, ]
     if (!is.null(inputs) && !row$input %in% inputs) { skipped[[x]] <- sprintf("needs %s input", row$input); next }
+    if (identical(fit[[x]], "drops_random") && !isTRUE(allow_fallback) && !identical(x, override)) {
+      skipped[[x]] <- sprintf("would drop the random terms (%s): only with allow_fallback = TRUE", paste(.ba_random_labels(p), collapse = ", "))
+      next
+    }
+    if (!identical(fit[[x]], "drops_random") && !.ba_random_capacity(row$max_random, p)) {
+      skipped[[x]] <- sprintf("models %s random terms; the design has %s", c("0" = "no", "1" = "one random intercept,", any = "any")[[row$max_random]],
+                              paste(.ba_random_labels(p), collapse = ", "))
+      next
+    }
     if (row$package == "bioana" && !isTRUE(allow_fallback) && !identical(x, override)) {
       skipped[[x]] <- "Bioana's own code: off unless allow_fallback = TRUE"; next
     }
@@ -82,14 +95,53 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
     keep <- c(keep, x)
   }
   if (!length(keep)) {
-    gold <- s$engine[e$package[match(s$engine, e$engine)] != "bioana"]
-    pk <- unique(e$package[match(gold, e$engine)])
-    stop(sprintf("No citable engine installed for %s (%s design). Install one of: %s. %s",
-                 key, .ba_design_kind(design$parsed), paste(pk, collapse = ", "),
-                 "Or run bioana_analyze(dir, allow_fallback = TRUE) to use Bioana's own code (not citable, marked FALLBACK)."),
+    ok <- s$engine[s$design_fit != "drops_random" & e$package[match(s$engine, e$engine)] != "bioana"]
+    pk <- unique(e$package[match(ok, e$engine)])
+    stop(sprintf("No citable engine can run %s for this design (%s; random terms: %s). %s %s",
+                 key, kind, if (length(p$random)) paste(.ba_random_labels(p), collapse = ", ") else "none",
+                 if (length(pk)) paste0("Install one of: ", paste(pk, collapse = ", "), ".") else "",
+                 paste("Engines not used:", paste(names(skipped), unlist(skipped), sep = ": ", collapse = "; "))),
          call. = FALSE)
   }
-  list(chain = keep, preferred = chain[1], skipped = skipped)
+  list(chain = keep, preferred = chain[1], skipped = skipped, fit = fit[keep])
+}
+
+.ba_random_labels <- function(p) vapply(p$random, `[[`, "", "label")
+
+# Can an engine with this max_random hold the design's random terms? "1" = one random intercept.
+.ba_random_capacity <- function(max_random, p) {
+  n <- length(p$random)
+  if (n == 0L || identical(max_random, "any")) return(TRUE)
+  if (identical(max_random, "0")) return(FALSE)
+  n == 1L && !identical(p$random[[1]]$intercept_only, FALSE)
+}
+
+# design_fit of an engine named by the user for a design it has no selection row for.
+.ba_design_fit_of <- function(row, p) {
+  if (!length(p$random) || identical(row$max_random, "any")) return("full")
+  if (.ba_random_capacity(row$max_random, p)) return("approx")
+  "drops_random"
+}
+
+# Run the chain: the first engine that works. After a failure, only an engine that fits the design
+# fully may take over; an approximation or one that drops random terms stops the analysis instead.
+# Warnings raised during the fit are collected, not lost.
+.ba_run_chain <- function(ch, run, what) {
+  failed <- list()
+  for (eng in ch$chain) {
+    if (length(failed) && !identical(ch$fit[[eng]], "full")) {
+      stop(sprintf("%s failed (%s). The next engine, %s, %s, so it was not run in its place. Fix the error, or choose an engine yourself: params = list(%s = list(engine = '%s')).",
+                   names(failed)[1], failed[[1]], eng,
+                   if (identical(ch$fit[[eng]], "approx")) "only approximates this design" else "drops the design's random terms",
+                   what, eng), call. = FALSE)
+    }
+    w <- character()
+    r <- tryCatch(withCallingHandlers(run(eng), warning = function(x) { w <<- c(w, conditionMessage(x)); invokeRestart("muffleWarning") }),
+                  error = function(err) err)
+    if (!inherits(r, "error")) return(list(result = r, engine = eng, failed = failed, fit_warnings = unique(w)))
+    failed[[eng]] <- conditionMessage(r)
+  }
+  stop("Every engine failed: ", paste(names(failed), unlist(failed), sep = ": ", collapse = "; "), call. = FALSE)
 }
 
 # The next gold-standard engine after the one used (never native code).
@@ -105,6 +157,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   e <- .ba_tsv("engines")
   row <- e[e$engine == engine, ]
   pkg <- row$package
+  fit_kind <- if (!is.null(chain$fit) && engine %in% names(chain$fit)) chain$fit[[engine]] else "full"
   list(engine = engine, package = pkg,
        version = if (pkg == "bioana") as.character(utils::packageVersion("bioana")) else
          tryCatch(as.character(utils::packageVersion(pkg)), error = function(err) NA_character_),
@@ -112,6 +165,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
        model = row$model, input = input, assumptions = row$assumptions,
        test_statistic = row$test_statistic, multiple_testing = row$multiple_testing,
        estimate_scale = row$estimate_scale, random_terms = random %||% row$random_terms,
+       design_fit = fit_kind, design_fit_note = if (!identical(fit_kind, "full")) .ba_fit_note(engine, design) else NULL,
        experimental_unit = design$spec$experimental_unit %||% "unit (one row of sample_metadata per experimental unit)",
        n_units = n_units,
        fallback_used = !is.null(chain) && (row$package == "bioana" || !identical(engine, chain$preferred)),
@@ -161,17 +215,14 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
 # Run the chain for a feature data type: first engine that works.
 .ba_feature_engines <- function(inputs, entry, design, alpha, args) {
   ch <- .ba_engine_chain(entry$data_type, design, .ba_input_kinds(inputs), args$engine, args$allow_fallback)
-  failed <- list()
-  for (eng in ch$chain) {
-    r <- tryCatch(get(paste0(".ba_engine_", eng), envir = asNamespace("bioana"))(inputs, design, alpha, args),
-                  error = function(err) err)
-    if (!inherits(r, "error")) break
-    failed[[eng]] <- conditionMessage(r)
-  }
-  if (inherits(r, "error")) stop("Every engine failed: ", paste(names(failed), unlist(failed), sep = ": ", collapse = "; "), call. = FALSE)
+  checks <- .ba_check_design(design, .ba_input_samples(inputs), what = "features")
+  rc <- .ba_run_chain(ch, function(eng) get(paste0(".ba_engine_", eng), envir = asNamespace("bioana"))(inputs, design, alpha, args),
+                      entry$data_type)
+  r <- rc$result; eng <- rc$engine; failed <- rc$failed
   ch$skipped <- c(ch$skipped, lapply(failed, function(m) paste("failed:", m)))
-  warn <- c(r$warnings, if (length(failed)) sprintf("engine %s failed (%s); used %s", names(failed), unlist(failed), eng))
+  warn <- c(r$warnings, if (length(failed)) sprintf("engine %s failed (%s); used %s, which fits the design fully", names(failed), unlist(failed), eng))
   r$summary$engine <- .ba_provenance(eng, design, r$call, r$input, r$n_units, ch, random = r$random)
+  r$summary$diagnostics <- .ba_diagnostics(checks, rc$fit_warnings, r$diagnostics)
   r$summary$secondary_engine <- .ba_secondary_engine(ch$chain, eng)
   list(table = r$table, warnings = warn, summary = r$summary)
 }
@@ -189,4 +240,24 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
        log10p_cor = if (sum(is.finite(m$p_1) & is.finite(m$p_2)) > 2) round(stats::cor(-log10(m$p_1), -log10(m$p_2), use = "complete.obs"), 3) else NA,
        significant_both = sum(s1 & s2), significant_primary_only = sum(s1 & !s2), significant_secondary_only = sum(!s1 & s2),
        jaccard = if (sum(s1 | s2)) round(sum(s1 & s2) / sum(s1 | s2), 3) else NA)
+}
+
+.ba_fit_note <- function(engine, design) {
+  s <- .ba_tsv("engine_selection")
+  n <- s$note[s$engine == engine & s$design == .ba_design_kind(design$parsed)]
+  n <- n[nzchar(n)]
+  if (length(n)) n[1] else NULL
+}
+
+# Sample ids an input list covers (the columns of its first matrix).
+.ba_input_samples <- function(inputs) {
+  m <- inputs$counts %||% inputs$values %||% inputs$coverage %||% inputs$ip
+  colnames(m)
+}
+
+# Diagnostics block: the design checks, warnings raised while fitting, engine-specific notes.
+.ba_diagnostics <- function(checks, fit_warnings = character(), engine_notes = NULL) {
+  ck <- if (is.null(checks) || !nrow(checks)) list() else lapply(split(checks, seq_len(nrow(checks))), as.list)
+  list(checks = unname(ck), n_check_warnings = sum(checks$status == "warn"),
+       fit_warnings = as.list(fit_warnings), engine = engine_notes)
 }

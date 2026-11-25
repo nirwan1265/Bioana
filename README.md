@@ -128,6 +128,32 @@ set `BIOANA_TESTDATA` or clone it next to `bioana/`.
 | bsseq Bismark files | formats read | coverage and cytosine report |
 | exomePeak2 MeRIP BAMs | windows, IP/input pairing, model runs | runs; too small for a differential check |
 
+## Safeguards: what Bioana refuses to do
+
+Before fitting a data set Bioana checks the design (`bioana_check_design(dir)` runs the same checks on
+the whole sample sheet; thresholds in `inst/rules/design_checks.json`). It **stops** when:
+
+- a treatment coefficient is confounded with another term (e.g. every control in one batch);
+- there are no residual degrees of freedom;
+- a subject (plant, animal, donor, ...) is measured more than once but `analysis.model` has no random term
+  for it: the samples would be treated as independent when they are not;
+- several libraries come from one unit under the same treatment (technical replicates);
+- a random term has one observation per level, or one level;
+- a count matrix holds normalised values (CPM, TPM), or the outcome values do not match its type
+  (binary not 0/1, negative counts, survival events not 0/1).
+
+It **warns** (in the report and `summary$diagnostics`) about few residual df, treatment levels with one
+unit, random terms with few levels, and every warning a package raised while fitting (singular fits,
+DESeq2 genes that did not converge, glmmTMB Hessian problems).
+
+It **never swaps in a method that does not fit the design**. Every engine row in
+`engine_selection.tsv` says how it fits the design (`design_fit`): `full`, `approx` (e.g. limma
+duplicateCorrelation for one random intercept instead of dream's mixed model; marked "approximates the
+design" in the report) or `drops_random` (only with `allow_fallback = TRUE`; marked "RANDOM TERMS
+DROPPED"). An engine that cannot hold the design's random terms (`max_random` in `engines.tsv`) is
+skipped. If an engine fails while fitting, the next one runs only if it fits the design fully;
+otherwise the analysis stops and says which engine you could choose yourself.
+
 ## Which packages it runs (gold standards, not home-made statistics)
 
 Every analysis calls a published package, chosen by two rule tables:
@@ -143,7 +169,7 @@ order per data type and per design: `fixed` = no random terms in
 | bisulfite counts | DSS (beta-binomial) → limma on M-values | limma on M-values |
 | methylation arrays | limma on M-values | limma + duplicateCorrelation |
 | m6A / MeDIP / RIP | edgeR IP x treatment interaction → limma on log2(IP/input) | limma |
-| primary outcome | lm, glm, glm.nb, clm, coxph → glmmTMB | lmerTest, glmer, glmer.nb, clmm → glmmTMB |
+| primary outcome | lm, glm, glm.nb, clm, coxph → glmmTMB | lmerTest, glmer, glmer.nb, clmm, coxme (survival; frailty Cox as approximation) → glmmTMB |
 | genotypes (GWAS on line means) | rrBLUP → GAPIT MLM | (kinship random effect) |
 
 The first installed engine is the **primary**; the next is the **secondary**.
