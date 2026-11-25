@@ -139,7 +139,8 @@
     # numeric levels (Biodes factors[].values / unit / scale), aligned with levels
     vv <- if (!is.na(k)) unlist(spec$factors[[k]]$values) else NULL
     if (length(vv)) values[[v]] <- list(levels = if (length(lv) == length(vv)) as.character(lv) else NULL, values = as.numeric(vv),
-                                        unit = spec$factors[[k]]$unit %||% "", scale = spec$factors[[k]]$scale %||% "linear")
+                                        unit = spec$factors[[k]]$unit %||% "", scale = spec$factors[[k]]$scale %||% "linear",
+                                        log_base = spec$factors[[k]]$log_base, log_offset = spec$factors[[k]]$log_offset)
   }
   list(formula = f, response = all.vars(f[[2]]), fixed_labels = fixed_labels, random = random,
        vars = vars, col = col, role = role, numeric = numeric_vars, levels = levels, values = values)

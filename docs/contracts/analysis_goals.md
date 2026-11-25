@@ -52,7 +52,7 @@ Proposed entries (Biodes owns the final wording):
 "assumptions": {"analysis.goals": "assumed: interaction (the question asks whether the response over time differs between genotypes)"}
 ```
 
-Schema 0.6.0 (Biodes 8132e0c). Bioana accepts `handoff_version` 0.6.
+Schema 0.6.x (Biodes 8132e0c, 0.6.2 at 4bcb848). Bioana accepts `handoff_version` 0.6.
 
 - `goals`: every goal the study answers, most important first. `primary_goal` is one of them;
   Biodes sizes the experiment for it (an interaction needs about 4× the replicates of a
@@ -72,13 +72,20 @@ Schema 0.6.0 (Biodes 8132e0c). Bioana accepts `handoff_version` 0.6.
   `peak`/`half_time` and `scope`. Bioana reads `scale = "outcome"` as **the scale the engine
   estimates on** (`engines.tsv` `estimate_scale`): outcome units for continuous outcomes, log2
   fold change for counts, log odds for binary, M-value for methylation. Bioana reports it as
-  `effect_scale_used`. `scope = "within_group"` is not run yet: Bioana tests time over all
-  groups and says so.
+  `effect_scale_used`. A trend size is present only when stated (per log10 unit when
+  log-scaled); otherwise it is absent and listed in `assumptions`.
+- `time_course` with `scope = "within_group"`, `group` (e.g. `"mutant"`) and `group_factor`
+  (e.g. `"genotype"`, a spec factor or model term): Bioana makes `group` the reference level
+  of that term and jointly tests the time main-effect coefficients, i.e. time within that
+  group (full model vs the model without that group's time effects). It needs the
+  `group_factor:time` interaction in the model; without it, or when the group is not a level,
+  time is tested over all groups and the report says why.
 - Trend factors: `factors[].values` (numbers aligned with `levels`, e.g. levels `"0 mg"`,
   values `0`), `unit`, `scale` (`linear` / `log`). Bioana maps level labels in the layout to
-  `values`, and with `scale = "log"` fits the slope on `log(value)`; with a zero (or negative)
-  dose on `log(value + smallest positive value)` (`inst/rules/goal_rules.json`
-  `trend_log_zero`). The report gives the slope's unit. **Simitall must plant the slope on the
+  `values`, and with `scale = "log"` fits the slope on `log_base(value + log_offset)`, both from
+  the factor (Biodes 0.6.2: `log_base: 10`, `log_offset` = smallest positive level when there is
+  a zero). Without them, `inst/rules/goal_rules.json` gives base 10 and the smallest positive
+  value. The report gives the slope's unit. **Simitall must plant the slope on the
   same scale.**
 - The question Biodes asks when the text does not decide, e.g. for "RNA-seq of wild-type and
   mutant roots at 5 times": *Genes that differ between genotypes, genes whose response over
@@ -105,7 +112,23 @@ A goal id Bioana does not know yet stops that data set with the list it supports
 id that is not in the Biodes registry (when `studyforge` is installed) is reported as unknown
 to Biodes.
 
-## 4. For Simitall (later)
+## 4. Goal recovery (simulated data)
+
+Keyed to each data set's manifest `truth.goal` and `sim_truth.json` `goal_truth`
+(`goal`, `model_terms`, `status`). `summary$analyses$<id>$goal_recovery`:
+
+- every data set: `goal`, `status`, `model_terms` (Simitall), `tested_terms` (Bioana),
+  `terms_match` (same variable sets), `scored` (planted and same goal), `within` /
+  `group_match` (within-group time course vs `groups_changing`), `predictor_match` (trend:
+  Bioana's `log_base(values + log_offset)` against `goal_truth.x`; a mismatch stops the slope
+  comparison and is reported).
+- outcome: `p`, `detected`; for a one-coefficient goal `estimate`, `true_effect`, `bias`,
+  `covered` (continuous) or `sign_agreement`.
+- features (`truth.goal.file`: feature_id, term, effect, change): `tpr` (share of goal features
+  found by the goal test), `found`, `n_goal_features`, `n_tested`, `n_called`,
+  `called_outside_goal`; trend also `estimate_cor`, `sign_agreement`.
+
+## 5. For Simitall
 
 Plant truth for `primary_goal` on the scales in section 2 (outcome scale per data type; log
 trend with the zero-dose offset): an interaction effect (the difference of differences) for

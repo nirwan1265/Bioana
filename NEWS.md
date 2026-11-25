@@ -1,3 +1,15 @@
+# bioana 0.7.2
+
+- Biodes 0.6.2: trend on `log_base(x + log_offset)` from the spec factor (defaults in `goal_rules.json`:
+  base 10, smallest positive value); trend size may be absent.
+- `time_course` within one group (`goal_effect.time_course` `scope`, `group`, `group_factor`): that group is
+  the reference level and its time effects are tested jointly. Equals `anova()` and DESeq2's LRT on the same
+  matrices (`test-goals.R`).
+- Outcome joint tests: reduced model = full model matrix without the goal's columns.
+- `goal_recovery` (simulated data), keyed to manifest `truth.goal` and `sim_truth.json` `goal_truth`: terms
+  match, detection, estimate vs true effect, trend predictor check; for features the share of goal features
+  found (`tpr`). Joint goals on features are now scored.
+
 # bioana 0.7.1
 
 - Reads Biodes 0.6.0 specs: `handoff_version` 0.6; `assumptions` keyed by field path (reason kept);

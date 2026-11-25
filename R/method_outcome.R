@@ -64,13 +64,18 @@
   fit <- rc$result; eng <- rc$engine
   goal_result <- NULL
   if (identical(plan$test, "lrt")) {
-    # the reduced model: the same engine without the goal's terms
-    fixed0 <- setdiff(p$fixed_labels, plan$drop_terms)
+    # the reduced model: the same engine on the full model matrix without the goal's columns (a formula
+    # without the terms would re-code the rest, e.g. treatment + treatment:time spans the full model)
+    rhs <- stats::reformulate(p$fixed_labels)
+    X <- stats::model.matrix(rhs, stats::model.frame(rhs, frame, na.action = stats::na.pass))
+    X0 <- X[, !colnames(X) %in% c(plan$drop, "(Intercept)"), drop = FALSE]
+    fr0 <- frame
+    fixed0 <- if (ncol(X0)) { fr0$X0_ <- X0; "X0_" } else character()
     bars <- vapply(.ba_findbars(f), function(b) paste0("(", paste(deparse(b), collapse = ""), ")"), "")
     f0 <- stats::reformulate(c(if (length(fixed0)) fixed0 else "1", bars), response = "y_")
     p0 <- p; p0$fixed_labels <- fixed0
     goal_result <- tryCatch({
-      fit0 <- .ba_fit_outcome(eng, f0, .ba_nobars(f0), frame, type, p0)
+      fit0 <- .ba_fit_outcome(eng, f0, .ba_nobars(f0), fr0, type, p0)
       .ba_lrt(fit0, fit)
     }, error = function(e) list(error = conditionMessage(e)))
     if (!is.null(goal_result$error)) warn <- c(warn, paste("joint test failed:", goal_result$error))
@@ -119,6 +124,10 @@
                   warnings = warn)
   truth <- .ba_entry_truth(entry, design$dir)
   rec <- NULL
+  if (!is.null(truth) && !is.null(entry$truth$goal)) {
+    gt <- truth[[entry$truth$goal$field %||% "goal_truth"]]
+    if (!is.null(gt)) summary$goal_recovery <- .ba_goal_recovery_outcome(gt, summary$goal, res, alpha, type)
+  }
   if (!is.null(truth)) {
     rec <- .ba_outcome_recovery(res, truth, frame, p, alpha, type)
     if (!is.null(rec)) {
@@ -225,7 +234,10 @@
 # One outcome fit per engine id (inst/rules/engines.tsv); the chain decides which.
 .ba_fit_outcome <- function(eng, f, fixed_f, frame, type, p) {
   bars <- vapply(.ba_findbars(f), function(b) paste0("(", paste(deparse(b), collapse = ""), ")"), "")
-  surv_rhs <- function(extra = character()) stats::as.formula(paste("survival::Surv(y_, event_) ~", paste(c(p$fixed_labels, extra), collapse = " + ")))
+  surv_rhs <- function(extra = character()) {
+    rhs <- c(p$fixed_labels, extra); if (!length(rhs)) rhs <- "1"
+    stats::as.formula(paste("survival::Surv(y_, event_) ~", paste(rhs, collapse = " + ")))
+  }
   switch(eng,
     stats_lm = stats::lm(fixed_f, data = frame),
     lmer = {

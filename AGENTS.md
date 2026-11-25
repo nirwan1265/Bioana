@@ -137,8 +137,17 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
   the trend goal for `scale = "log"`). Tell Simitall (same change in its parser).
 - `inst/rules/goal_rules.json`: zero-dose log rule (`offset_min_positive`) and the
   meaning of `goal_effect.scale = "outcome"` (engine scale). Simitall must plant on these.
-- Not done: `time_course` `scope = "within_group"` (Biodes does not name the group);
-  scoring against `sim_truth.json` `goal_truth`.
+- Biodes 0.6.2 (4bcb848): trend `log_base`/`log_offset` read from the factor
+  (`parsed$values` carries them: same change for Simitall's parser); `time_course`
+  `scope = "within_group"` with `group`/`group_factor` runs (group as reference level, time
+  main-effect columns tested jointly). Outcome joint tests now fit the reduced model on the
+  full model matrix minus the goal's columns (`X0_`), not a reduced formula.
+- `goal_recovery` per data set, keyed to manifest `truth.goal` and `sim_truth.json`
+  `goal_truth` (contract section 4). Simitall's power sweep reads `goal_recovery$tpr`
+  (features); outcome goals give `detected`.
+- Open with Simitall (fa37c0c): `.suite_trend_x` puts a zero dose one decade below the
+  smallest positive value; the agreed predictor is `log10(x + log_offset)`.
+  `goal_recovery$predictor_match` is FALSE until that changes.
 
 ## Packages
 

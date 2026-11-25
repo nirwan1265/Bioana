@@ -127,28 +127,124 @@ test_that("goal resolution: default with a note, goals that do not apply, explic
   expect_true(all(c("treatment_effect", "interaction", "time_course", "trend", "association") %in% gl$goal))
 })
 
-test_that("trend on Biodes-style factor values: level labels mapped to values, log scale with a zero dose", {
+trend_folder <- function(factor_extra = list(), effect = NULL, truth_x = NULL, seed = 4) {
   d <- file.path(tempfile("trend_"), "design"); dir.create(d, recursive = TRUE)
   lev <- c("0 mg", "1 mg", "10 mg", "100 mg"); val <- c(0, 1, 10, 100)
   grid <- expand.grid(rep = 1:4, dose = lev, stringsAsFactors = FALSE); grid$sample_id <- sprintf("S%02d", seq_len(nrow(grid)))
   x <- val[match(grid$dose, lev)]
-  set.seed(4); grid$primary_outcome <- 5 + 0.8 * log(x + 1) + stats::rnorm(nrow(grid), 0, 0.3)
-  spec <- list(handoff_version = "0.6.0", origin = "observed", organism = "test", system = "lab",
-               factors = list(list(name = "dose", n_levels = 4L, levels = as.list(lev), values = as.list(val), unit = "mg", scale = "log")),
-               design = list(chosen = "crd", reps = 4L), primary_outcome = list(name = "growth", type = "continuous"),
-               analysis = list(model = "y ~ treatment", terms = list(treatment = "dose", layout_columns = list("dose")),
-                               goals = list("trend"), primary_goal = "trend", goal_terms = list(trend = list("treatment")),
-                               goal_effect = list(trend = list(size = 0.5, scale = "outcome", definition = "slope per unit of the numeric factor"))))
+  set.seed(seed); grid$primary_outcome <- 5 + 0.8 * log10(x + 1) + stats::rnorm(nrow(grid), 0, 0.3)
+  an <- list(model = "y ~ treatment", terms = list(treatment = "dose", layout_columns = list("dose")),
+             goals = list("trend"), primary_goal = "trend", goal_terms = list(trend = list("treatment")))
+  if (!is.null(effect)) an$goal_effect <- list(trend = effect)
+  spec <- list(handoff_version = "0.6.2", origin = "observed", organism = "test", system = "lab",
+               factors = list(c(list(name = "dose", n_levels = 4L, levels = as.list(lev), values = as.list(val), unit = "mg", scale = "log"), factor_extra)),
+               design = list(chosen = "crd", reps = 4L), primary_outcome = list(name = "growth", type = "continuous"), analysis = an,
+               assumptions = if (is.null(effect$size)) list(analysis.goal_effect.trend.size = "not stated"))
   jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
   utils::write.csv(grid[, c("sample_id", "dose", "rep")], file.path(d, "field_layout.csv"), row.names = FALSE)
   utils::write.table(grid, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
-  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome"))
-  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE))
+  e <- list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome")
+  if (!is.null(truth_x)) {
+    jsonlite::write_json(list(intercept = 5, goal_truth = list(goal = "trend", model_terms = list("treatment"), status = "planted", true_effect = 0.8,
+                                                               values = as.list(val), x = as.list(truth_x), scale = "log")),
+                         file.path(d, "sim_truth.json"), auto_unbox = TRUE, pretty = TRUE)
+    e$truth <- list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "trend", field = "goal_truth", terms = list("treatment"), test = "wald"))
+  }
+  bioana_write_manifest(d, e)
+  list(dir = d, grid = grid, x = x)
+}
+
+test_that("trend: level labels mapped to values, log10(x + log_offset) from the spec, size may be absent", {
+  tf <- trend_folder(factor_extra = list(log_base = 10, log_offset = 1), truth_x = log10(c(0, 1, 10, 100) + 1))
+  utils::capture.output(r <- bioana_analyze(tf$dir, secondary = FALSE))
   g <- r$summary$analyses$outcome$goal
-  expect_match(g$scale_note, "log\\(treatment \\+ 1 mg\\)")
-  expect_equal(g$effect$size, 0.5)
-  expect_equal(g$effect_scale_used, "outcome units")
-  co <- stats::coef(summary(stats::lm(grid$primary_outcome ~ log(x + 1))))[2, ]
+  expect_match(g$scale_note, "log10 unit of treatment \\+ 1 mg \\(offset: factors\\[\\]\\.log_offset\\)")
+  expect_null(g$effect$size)
+  co <- stats::coef(summary(stats::lm(tf$grid$primary_outcome ~ log10(tf$x + 1))))[2, ]
   res <- r$results$outcome
   expect_equal(res$estimate[res$term == "treatment"], unname(co["Estimate"]), tolerance = 1e-8)
+  gr <- r$summary$analyses$outcome$goal_recovery
+  expect_true(gr$scored); expect_true(gr$terms_match); expect_true(gr$predictor_match)
+  expect_true(gr$detected); expect_true(gr$covered); expect_equal(gr$true_effect, 0.8)
+})
+
+test_that("trend without log_base / log_offset uses goal_rules.json; a different planted predictor is flagged", {
+  # Simitall fa37c0c: zero one decade below the smallest positive value, not log10(x + 1)
+  tf <- trend_folder(effect = list(size = 0.5, scale = "outcome", definition = "slope per log10 unit"),
+                     truth_x = c(-1, 0, 1, 2))
+  utils::capture.output(r <- bioana_analyze(tf$dir, secondary = FALSE))
+  g <- r$summary$analyses$outcome$goal
+  expect_match(g$scale_note, "log10 unit of treatment \\+ 1 mg \\(offset: the smallest positive value")
+  expect_equal(g$effect$size, 0.5); expect_equal(g$effect_scale_used, "outcome units")
+  gr <- r$summary$analyses$outcome$goal_recovery
+  expect_false(gr$predictor_match); expect_null(gr$covered); expect_match(gr$note, "not comparable")
+})
+
+within_folder <- function(seed = 11, G = 150) {
+  d <- file.path(tempfile("within_"), "design"); dir.create(d, recursive = TRUE)
+  grid <- expand.grid(rep = 1:4, time = c("0", "6", "24"), genotype = c("wt", "mutant"), stringsAsFactors = FALSE)
+  grid$sample_id <- sprintf("S%02d", seq_len(nrow(grid)))
+  mut <- grid$genotype == "mutant"; tm <- match(grid$time, c("0", "6", "24")) - 1
+  set.seed(seed); grid$primary_outcome <- 10 + 0.3 * mut + 1.0 * mut * tm + stats::rnorm(nrow(grid), 0, 0.5)
+  spec <- list(handoff_version = "0.6.2", origin = "observed", organism = "test", system = "lab",
+               factors = list(list(name = "genotype", n_levels = 2L, levels = list("wt", "mutant")),
+                              list(name = "time", n_levels = 3L, levels = list("0", "6", "24"), values = list(0, 6, 24), unit = "h")),
+               design = list(chosen = "factorial", reps = 4L), primary_outcome = list(name = "growth", type = "continuous"),
+               analysis = list(model = "y ~ treatment * time", terms = list(treatment = "genotype", time = "time", layout_columns = list("genotype", "time")),
+                               goals = list("time_course"), primary_goal = "time_course", goal_terms = list(time_course = list("time")),
+                               goal_effect = list(time_course = list(size = 2, scale = "outcome", shape = "monotone", scope = "within_group",
+                                                                     group = "mutant", group_factor = "genotype"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(grid[, c("sample_id", "genotype", "time", "rep")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(grid, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  mu <- 2^stats::rnorm(G, 7, 1); ch <- c(rep(1.5, 20), rep(0, G - 20))
+  cnt <- sapply(seq_len(nrow(grid)), function(j) stats::rnbinom(G, mu = mu * 2^(ch * mut[j] * (tm[j] > 0)), size = 20))
+  dimnames(cnt) <- list(sprintf("g%03d", 1:G), grid$sample_id)
+  write_mat(cnt, file.path(d, "counts.tsv"))
+  dir.create(file.path(d, "truth"))
+  utils::write.table(data.frame(feature_id = sprintf("g%03d", 1:20), term = "treatment:time", effect = 1.5, change = 1.5),
+                     file.path(d, "truth", "rna_goal.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  gt <- list(goal = "time_course", model_terms = list("treatment:time"), status = "planted", scope = "within_group",
+             groups_changing = list("mutant"), group_reference = "wt", true_effect = 2)
+  jsonlite::write_json(list(intercept = 10, goal_truth = gt), file.path(d, "sim_truth.json"), auto_unbox = TRUE, pretty = TRUE)
+  bioana_write_manifest(d,
+    list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome",
+         truth = list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "time_course", field = "goal_truth", terms = list("treatment:time"), test = "lrt"))),
+    list(id = "rna", data_type = "feature_counts", assay = "rnaseq", files = list(counts = "counts.tsv"),
+         truth = list(goal = list(goal = "time_course", file = "truth/rna_goal.tsv", term = "treatment:time", effect_scale = "log2 largest change"))))
+  list(dir = d, grid = grid, counts = cnt)
+}
+
+test_that("time_course within one group = anova of the model without that group's time effects", {
+  w <- within_folder()
+  utils::capture.output(r <- bioana_analyze(w$dir, only = "outcome", secondary = FALSE))
+  a <- r$summary$analyses$outcome
+  expect_equal(a$goal$within$level, "mutant")
+  expect_equal(unlist(a$goal$coefficients), c("time6", "time24"))
+  g2 <- factor(w$grid$genotype, levels = c("mutant", "wt")); tt <- factor(w$grid$time, levels = c("0", "6", "24"))
+  X <- stats::model.matrix(~ g2 * tt); X0 <- X[, !colnames(X) %in% c("tt6", "tt24")]
+  ref <- stats::anova(stats::lm(w$grid$primary_outcome ~ X0 - 1), stats::lm(w$grid$primary_outcome ~ X - 1))
+  expect_equal(a$goal$result$p, ref[2, "Pr(>F)"], tolerance = 1e-10)
+  expect_equal(a$goal$result$statistic, ref[2, "F"], tolerance = 1e-10)
+  gr <- a$goal_recovery
+  expect_true(gr$scored); expect_true(gr$terms_match); expect_true(gr$group_match); expect_true(gr$detected)
+})
+
+test_that("goal recovery for count features: share of Simitall's goal genes found by the within-group test", {
+  skip_if_not_installed("DESeq2")
+  w <- within_folder()
+  utils::capture.output(r <- bioana_analyze(w$dir, only = "rna", secondary = FALSE))
+  a <- r$summary$analyses$rna
+  expect_match(a$goal$label, "time_course within treatment = mutant")
+  gr <- a$goal_recovery
+  expect_true(gr$terms_match); expect_equal(gr$n_goal_features, 20)
+  expect_gt(gr$tpr, 0.8); expect_lt(gr$called_outside_goal, 10)
+  # the reference level is mutant, so DESeq2's LRT drops the time columns of mutant
+  cd <- data.frame(treatment = factor(w$grid$genotype, levels = c("mutant", "wt")), time = factor(w$grid$time, levels = c("0", "6", "24")))
+  X <- stats::model.matrix(~ treatment * time, cd)
+  dds <- DESeq2::DESeqDataSetFromMatrix(w$counts, cd, ~ treatment * time)
+  dds <- suppressMessages(DESeq2::DESeq(dds, test = "LRT", full = X, reduced = X[, !colnames(X) %in% c("time6", "time24")], quiet = TRUE))
+  g <- DESeq2::results(dds)
+  t <- r$results$rna[match(rownames(g), r$results$rna$feature_id), ]
+  expect_equal(t$p, g$pvalue, tolerance = 1e-6)
 })

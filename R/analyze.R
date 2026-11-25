@@ -148,6 +148,15 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     cat(sprintf("  [%s]%s%s %s%s\n", id, etxt, gtxt, line, rtxt))
     if (!is.null(g$result$p)) cat(sprintf("      %s: statistic %.3g on %g df, p = %.3g\n", g$label, g$result$statistic, g$result$df, g$result$p))
     if (!is.null(g$note)) cat(sprintf("      goal: %s\n", g$note))
+    if (!is.null(g$scale_note)) cat(sprintf("      trend: %s\n", g$scale_note))
+    gr <- a$goal_recovery
+    if (!is.null(gr)) cat(sprintf("      goal truth (%s, terms %s%s): %s\n", gr$goal, paste(unlist(gr$model_terms), collapse = ", "),
+      if (isFALSE(gr$terms_match)) ", NOT the terms Bioana tested" else "",
+      if (!isTRUE(gr$scored)) gr$note %||% "not scored" else if (!is.null(gr$tpr)) sprintf("%d/%d goal features found (tpr %.2f), %d called outside the goal set",
+        gr$found, gr$n_tested, gr$tpr, gr$called_outside_goal) else
+        paste0(if (isTRUE(gr$detected)) "detected" else "not detected", sprintf(" (p = %.3g)", gr$p),
+               if (!is.null(gr$covered)) sprintf(", estimate %.3g vs true %.3g, %s", gr$estimate, gr$true_effect, if (isTRUE(gr$covered)) "in CI" else "outside CI") else "",
+               if (!is.null(gr$note)) paste0("; ", gr$note) else "")))
     dg <- a$diagnostics
     if (!is.null(dg)) {
       cw <- Filter(function(x) identical(x$status, "warn"), dg$checks)

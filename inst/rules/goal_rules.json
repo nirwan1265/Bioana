@@ -1,7 +1,10 @@
 {
   "_about": "Rules for analysis goals (R/goals.R). Agreed vocabulary: docs/contracts/analysis_goals.md; the goal registry lives in Biodes (studyforge inst/registry/analysis_goals.json).",
+  "trend_log_base_default": 10,
   "trend_log_zero": "offset_min_positive",
-  "_note_trend_log_zero": "a trend factor with scale 'log' (Biodes factors[].scale) and a zero or negative value: the slope is fitted on log(value + the smallest positive value). Without zeros: log(value). Natural log. Simitall must plant the trend slope on the same scale.",
+  "_note_trend_log": "a trend factor with scale 'log': the slope is fitted on log_base(value + log_offset), with log_base and log_offset from the spec factor (Biodes 0.6.2). Without log_base: trend_log_base_default. Without log_offset: the smallest positive value when a value is <= 0, else 0. Simitall plants on the same predictor; goal_recovery checks it (predictor_match).",
   "effect_scale_outcome": "the model scale of the engine",
-  "_note_effect_scale_outcome": "goal_effect.scale = 'outcome' is read as the scale the engine estimates on (engines.tsv estimate_scale): outcome units for continuous outcomes, log2 fold change for counts, log odds for binary, M-value for methylation."
+  "_note_effect_scale_outcome": "goal_effect.scale = 'outcome' is read as the scale the engine estimates on (engines.tsv estimate_scale): outcome units for continuous outcomes, log2 fold change for counts, log odds for binary, M-value for methylation.",
+  "within_group_level_match": "case-insensitive exact, then a unique partial match",
+  "_note_within_group": "time_course with goal_effect.time_course.scope = 'within_group', group and group_factor: group becomes the reference level of group_factor and the time main-effect coefficients are tested jointly (time within that group). Without a group:time interaction in the model, or a group Bioana cannot find, time is tested over all groups and the report says so."
 }
