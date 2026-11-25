@@ -101,6 +101,18 @@ model-matrix column names (`treatmenttreatment_2`).
 | `inst/rules/handoff.json`, `model_terms.json` | Biodes contract (supported handoff versions, model-term vocabulary); copies of Simitall's |
 | `tests/testthat/` | `test-analyze.R`: synthetic data in a fixture RCBD folder (no Biodes or Simitall needed); `test-gwas-selection.R`, `test-legacy-analyses.R`: the tests moved with the functions, which simulate with Simitall (skipped without it) |
 
+## Analysis goals (v0.7, 2026-11-25)
+
+Contract with Biodes: [docs/contracts/analysis_goals.md](docs/contracts/analysis_goals.md).
+Biodes owns the vocabulary (`studyforge` `inst/registry/analysis_goals.json`) and writes
+`analysis.goals` / `primary_goal` / `goal_terms` (+ `assumptions`). Bioana keys
+`engine_selection.tsv` `goals` to those ids (no copy of the vocabulary; `bioana_goals()`
+compares with the Biodes registry when studyforge is installed). `R/goals.R`: goal
+resolution per data set, test plans (Wald coefficients or LRT drop set), outcome LRT.
+Implemented: treatment_effect, interaction, time_course, trend, association, survival.
+Truth scoring of joint tests is not done yet (Simitall should plant truth for
+`primary_goal`; the truth `term` names the goal term).
+
 ## Safeguards (2026-11-25)
 
 - `R/design_checks.R` + `inst/rules/design_checks.json`: checks before every data set

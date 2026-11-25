@@ -142,7 +142,12 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     eng <- a$engine
     etxt <- if (is.null(eng)) "" else sprintf(" [%s %s%s%s]", eng$package, eng$version, if (isTRUE(eng$fallback_used)) ", FALLBACK" else "",
                                               switch(eng$design_fit %||% "full", approx = ", approximates the design", drops_random = ", RANDOM TERMS DROPPED", ""))
-    cat(sprintf("  [%s]%s %s%s\n", id, etxt, line, rtxt))
+    g <- a$goal
+    gtxt <- if (is.null(g) || (identical(g$id, "treatment_effect") && identical(g$source, "default")) || identical(g$id, "association")) "" else
+      sprintf(" {goal %s, %s%s}", g$id, if (identical(g$test, "lrt")) "joint test" else "Wald", if (isTRUE(g$assumed_by_biodes)) ", assumed by Biodes" else "")
+    cat(sprintf("  [%s]%s%s %s%s\n", id, etxt, gtxt, line, rtxt))
+    if (!is.null(g$result$p)) cat(sprintf("      %s: statistic %.3g on %g df, p = %.3g\n", g$label, g$result$statistic, g$result$df, g$result$p))
+    if (!is.null(g$note)) cat(sprintf("      goal: %s\n", g$note))
     dg <- a$diagnostics
     if (!is.null(dg)) {
       cw <- Filter(function(x) identical(x$status, "warn"), dg$checks)

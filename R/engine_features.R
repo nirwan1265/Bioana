@@ -21,19 +21,38 @@
        n_units = length(d$ids), warnings = warnings, random = random, diagnostics = diagnostics)
 }
 
+# One row per feature for a joint test (no single estimate).
+.ba_joint_rows <- function(ids, label, stat, p, padj) {
+  data.frame(feature_id = ids, contrast = label, estimate = NA_real_, se = NA_real_, statistic = stat, p = p, padj = padj,
+             stringsAsFactors = FALSE)
+}
+
 .ba_no_random <- function(d, engine) {
   if (d$n_random) stop(sprintf("%s fits fixed terms only; the model has random terms (%s)", engine, paste(d$random_labels, collapse = ", ")), call. = FALSE)
 }
 
 # DESeq2: NB GLM, the design's fixed terms as a model matrix, Wald test per treatment coefficient.
 .ba_engine_deseq2 <- function(inputs, design, alpha, args) {
-  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed)
+  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed, design$goal)
   .ba_need_coefs(d); .ba_no_random(d, "DESeq2")
   cnt <- .ba_int_counts(inputs$counts, d$ids)
   X <- d$X
   key <- stats::setNames(colnames(X), make.names(colnames(X), unique = TRUE))
   colnames(X) <- names(key)
   dds <- DESeq2::DESeqDataSetFromMatrix(cnt, colData = d$frame, design = ~1)
+  if (identical(d$plan$test, "lrt")) {
+    X0 <- d$X0; colnames(X0) <- make.names(colnames(X0), unique = TRUE)
+    dds <- suppressMessages(DESeq2::DESeq(dds, test = "LRT", full = X, reduced = X0, quiet = TRUE))
+    r <- DESeq2::results(dds, alpha = alpha)
+    nc <- sum(!S4Vectors::mcols(dds)$fullBetaConv, na.rm = TRUE)
+    return(.ba_engine_result(.ba_joint_rows(rownames(r), d$plan$label, r$stat, r$pvalue, r$padj), d,
+                             "DESeq2 negative-binomial GLM, likelihood-ratio test", alpha,
+                             sprintf("DESeq2::DESeq(dds, test = 'LRT', full = model.matrix(%s), reduced = <full without %s>); DESeq2::results(dds, alpha = %g)",
+                                     paste(deparse(d$rhs), collapse = ""), paste(d$plan$drop, collapse = ", "), alpha),
+                             sprintf("raw integer counts, %d features x %d units", nrow(cnt), ncol(cnt)),
+                             warnings = if (nc) sprintf("DESeq2: %d features did not converge", nc) else character(),
+                             diagnostics = list(non_converged = nc)))
+  }
   dds <- suppressMessages(DESeq2::DESeq(dds, full = X, quiet = TRUE))
   tab <- do.call(rbind, lapply(d$coefs, function(cf) {
     r <- DESeq2::results(dds, name = names(key)[key == cf], alpha = alpha)
@@ -51,12 +70,20 @@
 
 # edgeR: TMM, NB dispersions, quasi-likelihood F test per treatment coefficient.
 .ba_engine_edger <- function(inputs, design, alpha, args) {
-  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed)
+  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed, design$goal)
   .ba_need_coefs(d); .ba_no_random(d, "edgeR")
   cnt <- .ba_int_counts(inputs$counts, d$ids)
   y <- .ba_edger_norm(edgeR::DGEList(cnt))
   y <- edgeR::estimateDisp(y, d$X)
   fit <- edgeR::glmQLFit(y, d$X)
+  if (identical(d$plan$test, "lrt")) {
+    tt <- edgeR::topTags(edgeR::glmQLFTest(fit, coef = match(d$plan$drop, colnames(d$X))), n = Inf, sort.by = "none")$table
+    return(.ba_engine_result(.ba_joint_rows(rownames(tt), d$plan$label, tt$F, tt$PValue, tt$FDR), d,
+                             "edgeR quasi-likelihood NB GLM, QL F test on a coefficient set", alpha,
+                             sprintf("fit <- glmQLFit(estimateDisp(normLibSizes(DGEList(counts)), X), X); glmQLFTest(fit, coef = c(%s)); X = model.matrix(%s)",
+                                     paste(sprintf("'%s'", d$plan$drop), collapse = ", "), paste(deparse(d$rhs), collapse = "")),
+                             sprintf("raw integer counts, %d features x %d units", nrow(cnt), ncol(cnt))))
+  }
   tab <- do.call(rbind, lapply(d$coefs, function(cf) {
     q <- edgeR::glmQLFTest(fit, coef = match(cf, colnames(d$X)))
     tt <- edgeR::topTags(q, n = Inf, sort.by = "none")$table
@@ -85,7 +112,11 @@
   list(fit = limma::eBayes(limma::lmFit(v, d$X, block = d$block, correlation = cor)), correlation = cor)
 }
 
-.ba_limma_table <- function(fit, coefs) {
+.ba_limma_table <- function(fit, coefs, plan = NULL, top = limma::topTable) {
+  if (identical(plan$test, "lrt")) {
+    tt <- top(fit, coef = plan$drop, number = Inf, sort.by = "none")
+    return(.ba_joint_rows(rownames(tt), plan$label, tt$F, tt$P.Value, tt$adj.P.Val))
+  }
   do.call(rbind, lapply(coefs, function(cf) {
     tt <- limma::topTable(fit, coef = cf, number = Inf, sort.by = "none")
     data.frame(feature_id = rownames(tt), contrast = cf, estimate = tt$logFC,
@@ -96,13 +127,14 @@
 
 # limma-voom on counts.
 .ba_engine_limma_voom <- function(inputs, design, alpha, args) {
-  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed)
+  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed, design$goal)
   .ba_need_coefs(d)
   cnt <- .ba_int_counts(inputs$counts, d$ids)
   y <- .ba_edger_norm(edgeR::DGEList(cnt))
   lf <- .ba_limma_fit(NULL, d, counts_y = y)
   rnd <- if (is.null(lf$correlation)) NULL else sprintf("%s as a within-group correlation (duplicateCorrelation, consensus %.3f)", d$random_labels, lf$correlation)
-  .ba_engine_result(.ba_limma_table(lf$fit, d$coefs), d, "limma-voom precision-weighted linear model, moderated t", alpha,
+  .ba_engine_result(.ba_limma_table(lf$fit, d$coefs, d$plan), d,
+                    paste("limma-voom precision-weighted linear model,", if (identical(d$plan$test, "lrt")) "moderated F on a coefficient set" else "moderated t"), alpha,
                     sprintf("v <- voom(normLibSizes(DGEList(counts)), X%s); fit <- eBayes(lmFit(v, X%s)); topTable(fit, coef = <coefficient>, number = Inf), X = model.matrix(%s)",
                             if (is.null(rnd)) "" else ", block, correlation", if (is.null(rnd)) "" else ", block, correlation",
                             paste(deparse(d$rhs), collapse = "")),
@@ -111,13 +143,14 @@
 
 # limma on values already on a linear scale (M-values, log ratios).
 .ba_engine_limma <- function(inputs, design, alpha, args) {
-  d <- .ba_feature_design(colnames(inputs$values), design$meta, design$parsed)
+  d <- .ba_feature_design(colnames(inputs$values), design$meta, design$parsed, design$goal)
   .ba_need_coefs(d)
   Y <- inputs$values[, d$ids, drop = FALSE]
   Y <- Y[stats::complete.cases(Y) & apply(Y, 1, stats::var) > 0, , drop = FALSE]
   lf <- .ba_limma_fit(Y, d)
   rnd <- if (is.null(lf$correlation)) NULL else sprintf("%s as a within-group correlation (duplicateCorrelation, consensus %.3f)", d$random_labels, lf$correlation)
-  .ba_engine_result(.ba_limma_table(lf$fit, d$coefs), d, "limma linear model, moderated t", alpha,
+  .ba_engine_result(.ba_limma_table(lf$fit, d$coefs, d$plan), d,
+                    paste("limma linear model,", if (identical(d$plan$test, "lrt")) "moderated F on a coefficient set" else "moderated t"), alpha,
                     sprintf("fit <- eBayes(lmFit(Y, X%s)); topTable(fit, coef = <coefficient>, number = Inf), X = model.matrix(%s)",
                             if (is.null(rnd)) "" else ", block, correlation", paste(deparse(d$rhs), collapse = "")),
                     sprintf("%s, %d features x %d units", inputs$values_scale %||% "values", nrow(Y), ncol(Y)), random = rnd)
@@ -125,7 +158,7 @@
 
 # dream: precision-weighted linear mixed model with the design's random terms.
 .ba_engine_dream <- function(inputs, design, alpha, args) {
-  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed)
+  d <- .ba_feature_design(colnames(inputs$counts), design$meta, design$parsed, design$goal)
   .ba_need_coefs(d)
   cnt <- .ba_int_counts(inputs$counts, d$ids)
   y <- .ba_edger_norm(edgeR::DGEList(cnt))
@@ -133,7 +166,7 @@
   vobj <- variancePartition::voomWithDreamWeights(y, form, d$frame, quiet = TRUE)
   fit <- variancePartition::dream(vobj, form, d$frame, quiet = TRUE)
   fit <- variancePartition::eBayes(fit)
-  tab <- do.call(rbind, lapply(d$coefs, function(cf) {
+  tab <- if (identical(d$plan$test, "lrt")) .ba_limma_table(fit, d$coefs, d$plan, top = variancePartition::topTable) else do.call(rbind, lapply(d$coefs, function(cf) {
     tt <- variancePartition::topTable(fit, coef = cf, number = Inf, sort.by = "none")
     data.frame(feature_id = rownames(tt), contrast = cf, estimate = tt$logFC,
                se = (sqrt(fit$s2.post) * fit$stdev.unscaled[, cf])[rownames(tt)],
@@ -148,7 +181,7 @@
 
 # DSS: beta-binomial regression on methylated and total reads per window, general design.
 .ba_engine_dss <- function(inputs, design, alpha, args) {
-  d <- .ba_feature_design(colnames(inputs$coverage), design$meta, design$parsed)
+  d <- .ba_feature_design(colnames(inputs$coverage), design$meta, design$parsed, design$goal)
   .ba_need_coefs(d); .ba_no_random(d, "DSS")
   M <- inputs$methylated[, d$ids, drop = FALSE]; C <- inputs$coverage[rownames(M), d$ids, drop = FALSE]
   f <- inputs$features[match(rownames(M), inputs$features$feature_id), , drop = FALSE]
@@ -177,7 +210,7 @@
 
 # edgeR on IP and input libraries together: unit + library type + library type x the design's fixed terms.
 .ba_engine_edger_ip_input <- function(inputs, design, alpha, args) {
-  d <- .ba_feature_design(colnames(inputs$ip), design$meta, design$parsed)
+  d <- .ba_feature_design(colnames(inputs$ip), design$meta, design$parsed, design$goal)
   .ba_need_coefs(d); .ba_no_random(d, "edgeR (IP x input)")
   ip <- .ba_int_counts(inputs$ip, d$ids); inp <- .ba_int_counts(inputs$input[rownames(ip), , drop = FALSE], d$ids)
   n <- length(d$ids)

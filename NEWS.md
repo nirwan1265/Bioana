@@ -1,3 +1,15 @@
+# bioana 0.7.0
+
+- Analysis goals (contract with Biodes: `docs/contracts/analysis_goals.md`). `engine_selection.tsv`
+  is keyed by goal; `engines.tsv` says which tests each engine runs (`wald`, `lrt`).
+  `treatment_effect`, `interaction` (Wald or joint), `time_course` (joint test without the time
+  terms), `trend` (numeric slope); goals read from `analysis.goals` / `primary_goal` /
+  `goal_terms`, assumed goals flagged, default with a note when the model has time or interaction
+  terms. `bioana_goals()`; `params$<id>$goal`.
+- Joint tests: DESeq2 LRT with a reduced model matrix, edgeR QL F and limma / voom / dream moderated
+  F on a coefficient set, outcome `anova(reduced, full)` (written to `goal_test.tsv`). Each equals the
+  package called directly (`test-goals.R`).
+
 # bioana 0.6.0
 
 - Design checks before every analysis (`bioana_check_design()`, `inst/rules/design_checks.json`):

@@ -20,6 +20,10 @@
   }
   paths <- c(results = .ba_write_tsv(ft$table, file.path(outdir, "results.tsv")))
   truth <- .ba_entry_truth(entry, design$dir)
+  if (!is.null(truth) && identical(ft$summary$goal$test, "lrt")) {
+    ft$warnings <- c(ft$warnings, "truth scoring of joint tests (time_course, interaction) comes later: not scored")
+    truth <- NULL
+  }
   if (!is.null(truth)) {
     if (identical(truth$kind, "regions")) {
       if (is.null(features)) stop("region truth needs feature coordinates", call. = FALSE)

@@ -52,21 +52,23 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   all(vapply(req, requireNamespace, logical(1), quietly = TRUE))
 }
 
-.ba_selection_rows <- function(key, kind) {
+.ba_selection_rows <- function(key, kind, goal = NULL) {
   s <- .ba_tsv("engine_selection")
   s <- s[s$data_type == key & s$design %in% c(kind, "any"), , drop = FALSE]
+  if (!is.null(goal)) s <- s[vapply(strsplit(s$goals, ",", fixed = TRUE), function(g) goal %in% g, logical(1)), , drop = FALSE]
   s[order(as.integer(s$rank)), , drop = FALSE]
 }
 
 .ba_design_kind <- function(p) if (length(p$random)) "random" else "fixed"
 
 # Ordered engines to try. `inputs` = the input kinds the data type can give (counts, values, ...).
-.ba_engine_chain <- function(key, design, inputs = NULL, override = NULL, allow_fallback = FALSE) {
+.ba_engine_chain <- function(key, design, inputs = NULL, override = NULL, allow_fallback = FALSE, test = "wald") {
   e <- .ba_tsv("engines")
   p <- design$parsed
   kind <- .ba_design_kind(p)
-  s <- .ba_selection_rows(key, kind)
-  if (!nrow(s)) stop(sprintf("No engine rows for '%s' in engine_selection.tsv.", key), call. = FALSE)
+  goal <- design$goal$id
+  s <- .ba_selection_rows(key, kind, goal)
+  if (!nrow(s)) stop(sprintf("No engine rows for '%s'%s in engine_selection.tsv.", key, if (!is.null(goal)) sprintf(" and goal '%s'", goal) else ""), call. = FALSE)
   chain <- s$engine
   fit <- stats::setNames(s$design_fit, s$engine)
   if (!is.null(override)) {
@@ -79,6 +81,9 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   for (x in chain) {
     row <- e[e$engine == x, ]
     if (!is.null(inputs) && !row$input %in% inputs) { skipped[[x]] <- sprintf("needs %s input", row$input); next }
+    if (!test %in% strsplit(row$tests, ",", fixed = TRUE)[[1]]) {
+      skipped[[x]] <- sprintf("has no %s test (the goal needs a joint test of several coefficients)", test); next
+    }
     if (identical(fit[[x]], "drops_random") && !isTRUE(allow_fallback) && !identical(x, override)) {
       skipped[[x]] <- sprintf("would drop the random terms (%s): only with allow_fallback = TRUE", paste(.ba_random_labels(p), collapse = ", "))
       next
@@ -173,7 +178,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
 }
 
 # Design pieces shared by the feature engines.
-.ba_feature_design <- function(sample_ids, meta, p) {
+.ba_feature_design <- function(sample_ids, meta, p, goal = NULL) {
   ids <- intersect(meta$sample_id, sample_ids)
   if (length(ids) < 3) stop(sprintf("Only %d samples of the data match sample_metadata sample_id.", length(ids)), call. = FALSE)
   frame <- .ba_frame(meta[match(ids, meta$sample_id), , drop = FALSE], p)
@@ -182,19 +187,24 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   frame <- frame[ok, , drop = FALSE]; ids <- ids[ok]
   rhs <- stats::reformulate(p$fixed_labels)
   X <- stats::model.matrix(rhs, data = frame)
+  col_term <- .ba_column_terms(rhs, frame)
   qx <- qr(X)
   X <- X[, sort(qx$pivot[seq_len(qx$rank)]), drop = FALSE]
-  coefs <- colnames(X)[vapply(colnames(X), function(t) .ba_coef_role(t, p), "") == "treatment"]
+  plan <- .ba_goal_plan(goal %||% list(id = "treatment_effect"), colnames(X), col_term, p)
+  coefs <- plan$coefs
   block <- NULL
   if (length(p$random) == 1L) block <- interaction(frame[p$random[[1]]$vars], drop = TRUE)
   rownames(frame) <- ids
-  list(ids = ids, frame = frame, X = X, coefs = coefs, block = block, n_random = length(p$random),
+  list(ids = ids, frame = frame, X = X, coefs = coefs, plan = plan, X0 = X[, !colnames(X) %in% plan$drop, drop = FALSE],
+       block = block, n_random = length(p$random),
        random_labels = vapply(p$random, `[[`, "", "label"), rhs = rhs,
        full_rhs = stats::as.formula(paste("~", paste(deparse(p$formula[[3]]), collapse = ""))))
 }
 
 .ba_need_coefs <- function(d) {
-  if (!length(d$coefs)) stop("the model has no estimable fixed treatment coefficient", call. = FALSE)
+  if (identical(d$plan$test, "lrt")) {
+    if (!length(d$plan$drop)) stop("the goal's joint test has no coefficients to drop", call. = FALSE)
+  } else if (!length(d$coefs)) stop("the model has no estimable coefficient for the goal", call. = FALSE)
   if (nrow(d$X) - ncol(d$X) < 1) stop("no residual degrees of freedom", call. = FALSE)
 }
 
@@ -214,8 +224,12 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
 
 # Run the chain for a feature data type: first engine that works.
 .ba_feature_engines <- function(inputs, entry, design, alpha, args) {
-  ch <- .ba_engine_chain(entry$data_type, design, .ba_input_kinds(inputs), args$engine, args$allow_fallback)
   checks <- .ba_check_design(design, .ba_input_samples(inputs), what = "features")
+  # the goal and its test plan decide which engines can run
+  goal <- .ba_resolve_goal(entry$data_type, design, args)
+  design <- .ba_goal_design(design, goal)
+  d0 <- .ba_feature_design(.ba_input_samples(inputs), design$meta, design$parsed, goal)
+  ch <- .ba_engine_chain(entry$data_type, design, .ba_input_kinds(inputs), args$engine, args$allow_fallback, test = d0$plan$test)
   rc <- .ba_run_chain(ch, function(eng) get(paste0(".ba_engine_", eng), envir = asNamespace("bioana"))(inputs, design, alpha, args),
                       entry$data_type)
   r <- rc$result; eng <- rc$engine; failed <- rc$failed
@@ -223,6 +237,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   warn <- c(r$warnings, if (length(failed)) sprintf("engine %s failed (%s); used %s, which fits the design fully", names(failed), unlist(failed), eng))
   r$summary$engine <- .ba_provenance(eng, design, r$call, r$input, r$n_units, ch, random = r$random)
   r$summary$diagnostics <- .ba_diagnostics(checks, rc$fit_warnings, r$diagnostics)
+  r$summary$goal <- .ba_goal_summary(goal, d0$plan)
   r$summary$secondary_engine <- .ba_secondary_engine(ch$chain, eng)
   list(table = r$table, warnings = warn, summary = r$summary)
 }

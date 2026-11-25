@@ -128,6 +128,28 @@ set `BIOANA_TESTDATA` or clone it next to `bioana/`.
 | bsseq Bismark files | formats read | coverage and cytosine report |
 | exomePeak2 MeRIP BAMs | windows, IP/input pairing, model runs | runs; too small for a differential check |
 
+## Analysis goals: what is tested
+
+Biodes writes the goal of the study into `study_spec.json` (`analysis.goals`,
+`analysis.primary_goal`, `analysis.goal_terms`; contract:
+[docs/contracts/analysis_goals.md](docs/contracts/analysis_goals.md); the vocabulary lives in Biodes'
+`inst/registry/analysis_goals.json`). `engine_selection.tsv` is keyed by goal (`goals` column) and each
+engine says which tests it can run (`engines.tsv` `tests`: `wald`, `lrt`).
+
+| goal | test | how |
+|---|---|---|
+| `treatment_effect` (default) | Wald, each treatment coefficient | as before |
+| `interaction` | Wald if one coefficient, joint test if several | DESeq2 LRT (reduced: without the interaction), edgeR QL F, limma/voom/dream moderated F, outcome `anova(reduced, full)` |
+| `time_course` | joint test: the model without every term containing time | same engines |
+| `trend` | Wald on the slope of a numeric term | the term is fitted as numeric |
+| `association` | per marker | GWAS engines |
+
+Engines without a joint test (DSS, the IP x input model) are skipped for joint-test goals. With no goal
+in `study_spec`, Bioana tests treatment effects and says so when the model has time or interaction
+terms. `bioana_goals()` lists what is available per data type; `params = list(<id> = list(goal = ...))`
+picks one. Each analysis records its goal, test and the coefficients tested in `summary$...$goal`;
+outcome joint tests go to `goal_test.tsv`.
+
 ## Safeguards: what Bioana refuses to do
 
 Before fitting a data set Bioana checks the design (`bioana_check_design(dir)` runs the same checks on

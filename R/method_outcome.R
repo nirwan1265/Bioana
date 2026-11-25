@@ -8,10 +8,13 @@
 # allow_fallback = TRUE.
 
 .ba_method_outcome <- function(entry, design, outdir, alpha = 0.05, args = list()) {
-  p <- design$parsed; spec <- design$spec; meta <- design$meta
+  spec <- design$spec; meta <- design$meta
   subsamples <- match.arg(args$subsamples %||% "aggregate", c("aggregate", "nest", "as_replicates"))
   col <- entry$column %||% "primary_outcome"
   type <- entry$outcome_type %||% spec$primary_outcome$type %||% "continuous"
+  goal <- .ba_resolve_goal(paste0("outcome:", type), design, args)
+  design <- .ba_goal_design(design, goal)
+  p <- design$parsed
   warn <- character()
   y <- suppressWarnings(as.numeric(meta[[col]]))
   if (!any(!is.na(y))) stop(sprintf("Column '%s' of the sample metadata is empty: nothing to fit.", col), call. = FALSE)
@@ -53,9 +56,24 @@
   d2$parsed$random <- lapply(.ba_findbars(f), function(b) list(label = paste(deparse(b[[3]]), collapse = ""), vars = all.vars(b[[3]]),
                                                                intercept_only = identical(paste(deparse(b[[2]]), collapse = ""), "1")))
   checks <- .ba_check_design(d2, meta = dat, what = "outcome")
-  ch <- .ba_engine_chain(paste0("outcome:", type), d2, NULL, args$engine, args$allow_fallback)
+  col_term <- .ba_column_terms(stats::reformulate(p$fixed_labels), frame)
+  plan <- .ba_goal_plan(goal, names(col_term), col_term, p)
+  ch <- .ba_engine_chain(paste0("outcome:", type), d2, NULL, args$engine, args$allow_fallback, test = plan$test)
   rc <- .ba_run_chain(ch, function(eng) .ba_fit_outcome(eng, f, fixed_f, frame, type, p), "outcome")
   fit <- rc$result; eng <- rc$engine
+  goal_result <- NULL
+  if (identical(plan$test, "lrt")) {
+    # the reduced model: the same engine without the goal's terms
+    fixed0 <- setdiff(p$fixed_labels, plan$drop_terms)
+    bars <- vapply(.ba_findbars(f), function(b) paste0("(", paste(deparse(b), collapse = ""), ")"), "")
+    f0 <- stats::reformulate(c(if (length(fixed0)) fixed0 else "1", bars), response = "y_")
+    p0 <- p; p0$fixed_labels <- fixed0
+    goal_result <- tryCatch({
+      fit0 <- .ba_fit_outcome(eng, f0, .ba_nobars(f0), frame, type, p0)
+      .ba_lrt(fit0, fit)
+    }, error = function(e) list(error = conditionMessage(e)))
+    if (!is.null(goal_result$error)) warn <- c(warn, paste("joint test failed:", goal_result$error))
+  }
   if (length(rc$failed)) warn <- c(warn, sprintf("engine %s failed (%s); used %s, which fits the design fully", names(rc$failed), unlist(rc$failed), eng))
   if (identical(ch$fit[[eng]], "drops_random")) warn <- c(warn, sprintf("random terms dropped by %s (allow_fallback = TRUE): %s", eng, paste(.ba_random_labels(d2$parsed), collapse = ", ")))
   diag_engine <- list()
@@ -70,9 +88,14 @@
   res <- .ba_coef_table(fit, type, frame, p)
   res$role <- vapply(res$term, function(t) .ba_coef_role(t, p), "")
   res$padj <- NA_real_
-  test <- res$role == "treatment"
+  test <- if (identical(plan$test, "wald")) res$term %in% plan$coefs else res$role == "treatment"
   res$padj[test] <- stats::p.adjust(res$p[test], "BH")
   paths <- c(results = .ba_write_tsv(res, file.path(outdir, "results.tsv")))
+  if (!is.null(goal_result) && is.null(goal_result$error)) {
+    paths <- c(paths, goal_test = .ba_write_tsv(data.frame(goal = goal$id, tested = plan$label, statistic = goal_result$statistic,
+                                                         df = goal_result$df, p = goal_result$p, method = goal_result$method),
+                                              file.path(outdir, "goal_test.tsv")))
+  }
   aov <- if (type == "continuous") tryCatch(as.data.frame(stats::anova(fit)), error = function(e) NULL) else NULL
   if (!is.null(aov) && has_random && !"Pr(>F)" %in% names(aov) && "F value" %in% names(aov)) {
     # lme4 without lmerTest gives F only: denominator df = rows - fixed coefficients
@@ -88,6 +111,7 @@
                                           sprintf("%s outcome '%s', %d units", type, col, nrow(frame)), nrow(frame), ch,
                                           formula = paste(deparse(f), collapse = "")),
                   diagnostics = .ba_diagnostics(checks, rc$fit_warnings, if (length(diag_engine)) diag_engine),
+                  goal = c(.ba_goal_summary(goal, plan), if (!is.null(goal_result)) list(result = goal_result)),
                   secondary_engine = .ba_secondary_engine(ch$chain, eng),
                   anova = if (is.null(aov)) NULL else lapply(split(cbind(term = rownames(aov), aov), seq_len(nrow(aov))), as.list),
                   warnings = warn)

@@ -28,6 +28,8 @@
   if (!all(in_vcf)) warn <- c(warn, sprintf("%d lines have no genotypes and are left out: %s", sum(!in_vcf),
                                             paste(utils::head(means$line[!in_vcf], 5), collapse = ", ")))
   n_pcs <- .ba_gwas_n_pcs(args$n_pcs %||% "auto", design)
+  goal <- .ba_resolve_goal("genotypes", design, args)
+  design$goal <- goal
   ch <- .ba_engine_chain("genotypes", design, NULL, args$engine, args$allow_fallback)
   backends <- c(rrblup = "rrBLUP", gapit_mlm = "GAPIT", bioana_emmax = "native")
   rc <- .ba_run_chain(ch, function(eng) analyze_gwas(vcf, means[in_vcf & is.finite(means$mean), c("line", "mean")], file.path(outdir, "gwas"),
@@ -53,6 +55,7 @@
                                           sum(in_vcf & is.finite(means$mean)), ch,
                                           random = sprintf("line means are BLUEs from %s; kinship random effect in the scan", lm_out$model)),
                   secondary_engine = .ba_secondary_engine(ch$chain, eng),
+                  goal = .ba_goal_summary(goal, list(test = "wald", coefs = "each marker", label = NULL)),
                   diagnostics = .ba_diagnostics(NULL, rc$fit_warnings, list(line_means = lm_out$diagnostics)))
   truth <- .ba_qtn_truth(entry, design$dir)
   rec <- NULL
