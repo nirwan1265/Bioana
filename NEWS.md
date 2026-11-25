@@ -1,3 +1,9 @@
+# bioana 0.7.1
+
+- Reads Biodes 0.6.0 specs: `handoff_version` 0.6; `assumptions` keyed by field path (reason kept);
+  `goal_effect` reported with the engine's scale; trend factors with `values` / `unit` / `scale`
+  (level labels mapped to values, log scale with a zero-dose offset from `inst/rules/goal_rules.json`).
+
 # bioana 0.7.0
 
 - Analysis goals (contract with Biodes: `docs/contracts/analysis_goals.md`). `engine_selection.tsv`

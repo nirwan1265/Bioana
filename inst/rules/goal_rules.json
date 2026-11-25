@@ -1,0 +1,7 @@
+{
+  "_about": "Rules for analysis goals (R/goals.R). Agreed vocabulary: docs/contracts/analysis_goals.md; the goal registry lives in Biodes (studyforge inst/registry/analysis_goals.json).",
+  "trend_log_zero": "offset_min_positive",
+  "_note_trend_log_zero": "a trend factor with scale 'log' (Biodes factors[].scale) and a zero or negative value: the slope is fitted on log(value + the smallest positive value). Without zeros: log(value). Natural log. Simitall must plant the trend slope on the same scale.",
+  "effect_scale_outcome": "the model scale of the engine",
+  "_note_effect_scale_outcome": "goal_effect.scale = 'outcome' is read as the scale the engine estimates on (engines.tsv estimate_scale): outcome units for continuous outcomes, log2 fold change for counts, log odds for binary, M-value for methylation."
+}

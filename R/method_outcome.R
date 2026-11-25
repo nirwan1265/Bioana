@@ -14,6 +14,7 @@
   type <- entry$outcome_type %||% spec$primary_outcome$type %||% "continuous"
   goal <- .ba_resolve_goal(paste0("outcome:", type), design, args)
   design <- .ba_goal_design(design, goal)
+  goal <- design$goal
   p <- design$parsed
   warn <- character()
   y <- suppressWarnings(as.numeric(meta[[col]]))
@@ -111,7 +112,8 @@
                                           sprintf("%s outcome '%s', %d units", type, col, nrow(frame)), nrow(frame), ch,
                                           formula = paste(deparse(f), collapse = "")),
                   diagnostics = .ba_diagnostics(checks, rc$fit_warnings, if (length(diag_engine)) diag_engine),
-                  goal = c(.ba_goal_summary(goal, plan), if (!is.null(goal_result)) list(result = goal_result)),
+                  goal = c(.ba_goal_summary(goal, plan), if (!is.null(goal_result)) list(result = goal_result),
+                           if (!is.null(goal$effect)) list(effect_scale_used = .ba_tsv("engines")$estimate_scale[.ba_tsv("engines")$engine == eng])),
                   secondary_engine = .ba_secondary_engine(ch$chain, eng),
                   anova = if (is.null(aov)) NULL else lapply(split(cbind(term = rownames(aov), aov), seq_len(nrow(aov))), as.list),
                   warnings = warn)

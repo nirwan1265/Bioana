@@ -39,10 +39,11 @@ bioana_goals <- function() {
   s <- .ba_tsv("engine_selection")
   avail <- unique(unlist(strsplit(s$goals[s$data_type == key], ",", fixed = TRUE)))
   default <- if (key == "genotypes") "association" else "treatment_effect"
-  assumed <- any(vapply(design$spec$assumptions %||% list(), function(x) {
-    f <- if (is.list(x)) x$field %||% "" else as.character(x)
-    grepl("analysis\\.(primary_goal|goals)", f)
-  }, logical(1)))
+  asm <- design$spec$assumptions %||% list()
+  # Biodes writes an object keyed by field path: assumptions["analysis.goals"] = "why"
+  assumed <- any(grepl("^analysis\\.(primary_goal|goals)$", names(asm))) ||
+    any(vapply(asm, function(x) is.list(x) && grepl("^analysis\\.(primary_goal|goals)$", x$field %||% ""), logical(1)))
+  why <- asm[["analysis.goals"]] %||% asm[["analysis.primary_goal"]]
   note <- NULL
   if (!is.null(args$goal)) {
     if (!args$goal %in% avail) stop(sprintf("Goal '%s' is not available for %s. Available: %s.", args$goal, key, paste(avail, collapse = ", ")), call. = FALSE)
@@ -64,8 +65,13 @@ bioana_goals <- function() {
   }
   reg <- .ba_goal_registry()
   unknown_to_biodes <- !is.null(reg) && !id %in% reg$id
-  list(id = id, source = src, assumed = assumed && src == "study_spec", terms = unlist(a$goal_terms[[id]]),
-       listed = listed, note = note, unknown_to_biodes = unknown_to_biodes)
+  eff <- a$goal_effect[[id]]
+  if (identical(id, "time_course") && identical(eff$scope, "within_group")) {
+    note <- c(note, "goal_effect scope 'within_group': Bioana tests time over all groups for now (the within-group test comes next)")
+  }
+  list(id = id, source = src, assumed = assumed && src == "study_spec", assumed_why = if (assumed && src == "study_spec") why,
+       terms = unlist(a$goal_terms[[id]]), effect = eff, listed = listed, note = if (length(note)) paste(note, collapse = "; "),
+       unknown_to_biodes = unknown_to_biodes)
 }
 
 # Design copy for the goal: trend fits its term as numeric.
@@ -75,6 +81,15 @@ bioana_goals <- function() {
     if (is.null(tv) || is.na(tv)) stop("Goal 'trend' needs analysis.goal_terms$trend: the numeric term.", call. = FALSE)
     if (!tv %in% design$parsed$vars) stop(sprintf("Goal 'trend': term '%s' is not in analysis.model (%s).", tv, design$model), call. = FALSE)
     design$parsed$numeric <- unique(c(design$parsed$numeric, tv))
+    vv <- design$parsed$values[[tv]]
+    unit <- if (!is.null(vv) && nzchar(vv$unit)) paste0(" ", vv$unit) else ""
+    if (!is.null(vv) && identical(vv$scale, "log")) {
+      off <- if (any(vv$values <= 0)) min(vv$values[vv$values > 0]) else 0
+      vv$transform <- function(x) log(x + off)
+      design$parsed$values[[tv]] <- vv
+      goal$scale_note <- if (off > 0) sprintf("slope per unit of log(%s + %g%s) (log scale; zero dose shifted by the smallest positive value)", tv, off, unit)
+                         else sprintf("slope per unit of log(%s%s) (log scale)", tv, unit)
+    } else goal$scale_note <- sprintf("slope per%s of %s (linear scale)", if (nzchar(unit)) unit else " unit", tv)
   }
   design$goal <- goal
   design
@@ -126,7 +141,8 @@ bioana_goals <- function() {
 
 # Summary block for the goal of one data set.
 .ba_goal_summary <- function(goal, plan) {
-  list(id = goal$id, source = goal$source, assumed_by_biodes = isTRUE(goal$assumed), test = plan$test,
+  list(id = goal$id, source = goal$source, assumed_by_biodes = isTRUE(goal$assumed), assumed_why = goal$assumed_why, test = plan$test,
+       effect = goal$effect, scale_note = goal$scale_note,
        coefficients = if (plan$test == "wald") as.list(plan$coefs) else as.list(plan$drop),
        dropped_terms = if (plan$test == "lrt") as.list(plan$drop_terms), label = plan$label,
        note = goal$note, unknown_to_biodes_registry = if (isTRUE(goal$unknown_to_biodes)) TRUE)

@@ -128,6 +128,18 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
 - `R/read_design.R` (copy of Simitall's `suite_handoff.R`): random terms now carry
   `intercept_only`. Tell Simitall (same change in `.suite_parse_model`).
 
+## Biodes 0.6.0 (8132e0c), 2026-11-25
+
+- `handoff.json` accepts 0.6. `assumptions` is read as an object keyed by field path.
+- `R/read_design.R` (copy of Simitall's `suite_handoff.R`): `parsed$values[[term]]`
+  = {levels, values, unit, scale} from `factors[]`; `.ba_frame` maps level labels
+  ("10 mg") to values for numeric terms and applies `values[[term]]$transform` (set by
+  the trend goal for `scale = "log"`). Tell Simitall (same change in its parser).
+- `inst/rules/goal_rules.json`: zero-dose log rule (`offset_min_positive`) and the
+  meaning of `goal_effect.scale = "outcome"` (engine scale). Simitall must plant on these.
+- Not done: `time_course` `scope = "within_group"` (Biodes does not name the group);
+  scoring against `sim_truth.json` `goal_truth`.
+
 ## Packages
 
 Every package Bioana calls is a row of `inst/rules/requirements.tsv`

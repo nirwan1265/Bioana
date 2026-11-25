@@ -129,16 +129,20 @@
   }
   # level order declared by the spec (reference first): the factor whose name is the term's
   # column, or the spec factor the term rule points to
-  levels <- list()
+  levels <- list(); values <- list()
   for (v in vars) {
     r <- term_rules$terms[[v]]
     k <- match(col[[v]], factor_names)
     if (is.na(k) && !is.null(r$from_spec_factor) && length(factor_names) >= r$from_spec_factor) k <- r$from_spec_factor
     lv <- if (!is.na(k)) unlist(spec$factors[[k]]$levels) else NULL
     if (length(lv)) levels[[v]] <- as.character(lv)
+    # numeric levels (Biodes factors[].values / unit / scale), aligned with levels
+    vv <- if (!is.na(k)) unlist(spec$factors[[k]]$values) else NULL
+    if (length(vv)) values[[v]] <- list(levels = if (length(lv) == length(vv)) as.character(lv) else NULL, values = as.numeric(vv),
+                                        unit = spec$factors[[k]]$unit %||% "", scale = spec$factors[[k]]$scale %||% "linear")
   }
   list(formula = f, response = all.vars(f[[2]]), fixed_labels = fixed_labels, random = random,
-       vars = vars, col = col, role = role, numeric = numeric_vars, levels = levels)
+       vars = vars, col = col, role = role, numeric = numeric_vars, levels = levels, values = values)
 }
 
 # Variables that appear inside I(...) in a formula.
@@ -159,8 +163,16 @@
   for (v in parsed$vars) {
     x <- as.character(data[[parsed$col[[v]]]])
     if (v %in% parsed$numeric) {
+      vv <- parsed$values[[v]]
       num <- suppressWarnings(as.numeric(x))
-      if (anyNA(num[!is.na(x)])) stop(sprintf("Model uses %s as a number (inside I()), but layout column '%s' is not numeric.", v, parsed$col[[v]]), call. = FALSE)
+      if (!is.null(vv$levels)) {
+        # level labels ("10 mg") -> the spec's values; plain numbers are kept
+        m <- match(x, vv$levels)
+        num[!is.na(m)] <- vv$values[m[!is.na(m)]]
+      }
+      if (anyNA(num[!is.na(x)])) stop(sprintf("Model uses %s as a number, but layout column '%s' has values that are neither numbers nor spec levels with values (e.g. '%s').",
+                                             v, parsed$col[[v]], x[!is.na(x) & is.na(num)][1]), call. = FALSE)
+      if (!is.null(vv$transform)) num <- vv$transform(num)
       out[[v]] <- num
       next
     }

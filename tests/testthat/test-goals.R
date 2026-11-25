@@ -53,7 +53,7 @@ test_that("interaction: DESeq2 LRT, edgeR QL F and limma-voom F equal each packa
   skip_if_not_installed("DESeq2"); skip_if_not_installed("edgeR"); skip_if_not_installed("limma")
   x <- tc_folder(goals = c("interaction", "treatment_effect"), primary = "interaction",
                  goal_terms = list(interaction = list("treatment", "time")),
-                 assumptions = list(list(field = "analysis.primary_goal", value = "interaction", reason = "test")))
+                 assumptions = list(analysis.goals = "assumed: interaction (the question does not say which comparison)"))
   out <- utils::capture.output(r <- bioana_analyze(x$dir, only = "rna", secondary = FALSE))
   a <- r$summary$analyses$rna
   expect_equal(a$goal$id, "interaction"); expect_true(a$goal$assumed_by_biodes)
@@ -125,4 +125,30 @@ test_that("goal resolution: default with a note, goals that do not apply, explic
   }
   gl <- bioana_goals()
   expect_true(all(c("treatment_effect", "interaction", "time_course", "trend", "association") %in% gl$goal))
+})
+
+test_that("trend on Biodes-style factor values: level labels mapped to values, log scale with a zero dose", {
+  d <- file.path(tempfile("trend_"), "design"); dir.create(d, recursive = TRUE)
+  lev <- c("0 mg", "1 mg", "10 mg", "100 mg"); val <- c(0, 1, 10, 100)
+  grid <- expand.grid(rep = 1:4, dose = lev, stringsAsFactors = FALSE); grid$sample_id <- sprintf("S%02d", seq_len(nrow(grid)))
+  x <- val[match(grid$dose, lev)]
+  set.seed(4); grid$primary_outcome <- 5 + 0.8 * log(x + 1) + stats::rnorm(nrow(grid), 0, 0.3)
+  spec <- list(handoff_version = "0.6.0", origin = "observed", organism = "test", system = "lab",
+               factors = list(list(name = "dose", n_levels = 4L, levels = as.list(lev), values = as.list(val), unit = "mg", scale = "log")),
+               design = list(chosen = "crd", reps = 4L), primary_outcome = list(name = "growth", type = "continuous"),
+               analysis = list(model = "y ~ treatment", terms = list(treatment = "dose", layout_columns = list("dose")),
+                               goals = list("trend"), primary_goal = "trend", goal_terms = list(trend = list("treatment")),
+                               goal_effect = list(trend = list(size = 0.5, scale = "outcome", definition = "slope per unit of the numeric factor"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(grid[, c("sample_id", "dose", "rep")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(grid, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome"))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE))
+  g <- r$summary$analyses$outcome$goal
+  expect_match(g$scale_note, "log\\(treatment \\+ 1 mg\\)")
+  expect_equal(g$effect$size, 0.5)
+  expect_equal(g$effect_scale_used, "outcome units")
+  co <- stats::coef(summary(stats::lm(grid$primary_outcome ~ log(x + 1))))[2, ]
+  res <- r$results$outcome
+  expect_equal(res$estimate[res$term == "treatment"], unname(co["Estimate"]), tolerance = 1e-8)
 })

@@ -45,11 +45,14 @@ Proposed entries (Biodes owns the final wording):
   "terms": {"treatment": "genotype", "time": "hours", "subject": "plant_id"},
   "goals": ["interaction", "treatment_effect", "time_course"],
   "primary_goal": "interaction",
-  "goal_terms": {"interaction": ["treatment", "time"], "time_course": ["time"]}
+  "goal_terms": {"interaction": ["treatment", "time"], "time_course": ["time"]},
+  "goal_effect": {"interaction": {"size": 1.5, "scale": "outcome",
+                                  "definition": "difference of differences"}}
 },
-"assumptions": [{"field": "analysis.primary_goal", "value": "interaction",
-                 "reason": "the question asks whether the response over time differs between genotypes"}]
+"assumptions": {"analysis.goals": "assumed: interaction (the question asks whether the response over time differs between genotypes)"}
 ```
+
+Schema 0.6.0 (Biodes 8132e0c). Bioana accepts `handoff_version` 0.6.
 
 - `goals`: every goal the study answers, most important first. `primary_goal` is one of them;
   Biodes sizes the experiment for it (an interaction needs about 4× the replicates of a
@@ -61,9 +64,22 @@ Proposed entries (Biodes owns the final wording):
   (`treatment * time` or `treatment:time`); `time_course` needs a time term; `trend` needs the
   numeric term as a main effect. Its column must hold numbers (Bioana fits it as numeric for
   this goal only).
-- `assumptions`: when Biodes chose a goal the user did not state, an entry whose `field`
-  is `analysis.primary_goal` or `analysis.goals`. Bioana prints "goal assumed by Biodes" in its
-  report.
+- `assumptions`: an object keyed by field path. A goal Biodes chose is the key
+  `analysis.goals` (or `analysis.primary_goal`); the value says why. Bioana reads the key,
+  prints "goal assumed by Biodes" and keeps the reason in `summary$...$goal$assumed_why`.
+  (An older array of `{field, ...}` entries is still read.)
+- `goal_effect`: per goal, `{size, scale, definition}`; `time_course` adds `shape`,
+  `peak`/`half_time` and `scope`. Bioana reads `scale = "outcome"` as **the scale the engine
+  estimates on** (`engines.tsv` `estimate_scale`): outcome units for continuous outcomes, log2
+  fold change for counts, log odds for binary, M-value for methylation. Bioana reports it as
+  `effect_scale_used`. `scope = "within_group"` is not run yet: Bioana tests time over all
+  groups and says so.
+- Trend factors: `factors[].values` (numbers aligned with `levels`, e.g. levels `"0 mg"`,
+  values `0`), `unit`, `scale` (`linear` / `log`). Bioana maps level labels in the layout to
+  `values`, and with `scale = "log"` fits the slope on `log(value)`; with a zero (or negative)
+  dose on `log(value + smallest positive value)` (`inst/rules/goal_rules.json`
+  `trend_log_zero`). The report gives the slope's unit. **Simitall must plant the slope on the
+  same scale.**
 - The question Biodes asks when the text does not decide, e.g. for "RNA-seq of wild-type and
   mutant roots at 5 times": *Genes that differ between genotypes, genes whose response over
   time differs between genotypes, or genes that change over time at all?* (`treatment_effect`,
@@ -91,6 +107,7 @@ to Biodes.
 
 ## 4. For Simitall (later)
 
-Plant truth for `primary_goal`: an interaction effect (the difference of differences) for
+Plant truth for `primary_goal` on the scales in section 2 (outcome scale per data type; log
+trend with the zero-dose offset): an interaction effect (the difference of differences) for
 `interaction`, a temporal pattern for `time_course`, a slope for `trend`. The truth file's
 `term` names the goal term (`treatment:time`, `time`, the numeric term) so Bioana can score it.

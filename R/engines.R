@@ -228,6 +228,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   # the goal and its test plan decide which engines can run
   goal <- .ba_resolve_goal(entry$data_type, design, args)
   design <- .ba_goal_design(design, goal)
+  goal <- design$goal
   d0 <- .ba_feature_design(.ba_input_samples(inputs), design$meta, design$parsed, goal)
   ch <- .ba_engine_chain(entry$data_type, design, .ba_input_kinds(inputs), args$engine, args$allow_fallback, test = d0$plan$test)
   rc <- .ba_run_chain(ch, function(eng) get(paste0(".ba_engine_", eng), envir = asNamespace("bioana"))(inputs, design, alpha, args),
@@ -238,6 +239,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   r$summary$engine <- .ba_provenance(eng, design, r$call, r$input, r$n_units, ch, random = r$random)
   r$summary$diagnostics <- .ba_diagnostics(checks, rc$fit_warnings, r$diagnostics)
   r$summary$goal <- .ba_goal_summary(goal, d0$plan)
+  if (!is.null(r$summary$goal$effect)) r$summary$goal$effect$scale_used <- r$summary$engine$estimate_scale
   r$summary$secondary_engine <- .ba_secondary_engine(ch$chain, eng)
   list(table = r$table, warnings = warn, summary = r$summary)
 }
