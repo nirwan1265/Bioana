@@ -4,6 +4,15 @@
   in `inst/extdata/real/airway/`). Bioana's DESeq2 run equals the vignette code
   (log2FC to 5e-9) and finds the known dexamethasone genes
   (`test-real-airway.R`).
+- BAM input: `bioana_manifest_from_files(annotation = , libraries = )` counts reads with Rsubread
+  featureCounts in genes (GTF), peaks (SAF or peak files) or exon windows (IP/input); paired-end detected
+  without an index; single-end ChIP reads extended to 125 bp (`file_formats.json` `chip_fragment_bp`).
+  HapMap genotypes (converted to VCF) and DSS count text are read too.
+- Sample names also match when a sample_id is the only prefix of a file name (`S01_subset.bam`).
+  Appending to a manifest keeps existing ids; reading the same files again replaces their entry.
+- Fix: bisulfite windows treat positions as 1-based (window k covers (k-1)*w+1 .. k*w).
+- `test-real-data.R`: airway BAMs, DiffBind ChIP, maize 282 GWAS, DSS, bsseq Bismark files, exomePeak2
+  MeRIP, from github.com/nirwan1265/bioana-testdata.
 - Factor levels follow `study_spec.json` `factors.levels` (reference first)
   instead of alphabetical order; levels the spec does not list come after.
 

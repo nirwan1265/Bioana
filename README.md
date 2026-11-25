@@ -84,11 +84,14 @@ Bioana's files under `<dir>/data/<id>/`, matches sample names to
 
 | format | detected by | becomes |
 |---|---|---|
+| BAM (one per library) | file name | reads counted with **Rsubread featureCounts** in genes (`annotation` = GTF), peaks (SAF or peak files) or exon windows (IP/input assays); `libraries` says which file is which unit and library (`chip`, `control`, `ip`, `input`); single-end ChIP reads extended to 125 bp fragments as DiffBind does |
 | featureCounts | `# Program:featureCounts` or its columns | counts: `feature_counts`, or peaks for ChIP/ATAC/CUT&Tag assays |
 | Salmon `quant.sf`, kallisto `abundance.tsv` (one folder per sample) | columns | gene counts via **tximport** (`tx2gene`, `lengthScaledTPM`) |
 | STAR `ReadsPerGene.out.tab` | `N_unmapped` rows | counts; strandedness detected or given |
 | Bismark `.cov` / cytosine report (one file per sample) | line pattern | `bisulfite_counts` (context kept from reports) |
 | VCF | `##fileformat=VCF` | `genotypes` |
+| HapMap (`.hmp.txt`, TASSEL / GAPIT) | `rs#  alleles  chrom  pos` header | `genotypes` (converted to VCF) |
+| DSS / BSmooth text (`chr pos N X`, one per sample) | columns | `bisulfite_counts` |
 | plain feature x sample table | file type | integers: counts; 0-1: `methylation_beta`; `<id>_IP` / `<id>_input` columns: `ip_input_counts` |
 | MACS narrowPeak / broadPeak | file name | peak calls have no counts: `bioana_consensus_peaks()` writes a SAF to count with `featureCounts -F SAF` |
 
@@ -96,6 +99,22 @@ Formats live in `inst/rules/file_formats.tsv` (pattern, header, columns,
 reader) and `file_formats.json` (sample-name rules, assay -> data type). A new
 format is a row and a reader. Normalised values (TPM, CPM) are refused: the
 engines need raw counts.
+
+### Checked on real data
+
+`tests/testthat/test-real-data.R` runs published data sets through Bioana. The
+data live in [bioana-testdata](https://github.com/nirwan1265/bioana-testdata);
+set `BIOANA_TESTDATA` or clone it next to `bioana/`.
+
+| data | check | result |
+|---|---|---|
+| airway counts (DESeq2 vignette) | Bioana = vignette code | log2FC to 5e-9; known dexamethasone genes up |
+| airway BAMs + GTF | featureCounts = the package's counts | median ratio 1, r = 0.998 |
+| DiffBind tamoxifen ChIP, chr18 1-20 Mb | Bioana's DB calls vs DiffBind's own (DESeq2) | 91-96% of Bioana's calls are DiffBind's, same direction at every one; DiffBind calls more sites (it subtracts input reads, which raises its folds about 1.5x) |
+| maize 282 panel, 2 locations (TASSEL) | line means; GWAS = rrBLUP called directly | r = 0.97 with TASSEL's line values; -log10 p to 1e-11 |
+| DSS example counts | Bioana at site level = DSS called directly | identical statistics, same 247 DML |
+| bsseq Bismark files | formats read | coverage and cytosine report |
+| exomePeak2 MeRIP BAMs | windows, IP/input pairing, model runs | runs; too small for a differential check |
 
 ## Which packages it runs (gold standards, not home-made statistics)
 

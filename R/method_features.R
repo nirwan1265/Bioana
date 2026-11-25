@@ -92,7 +92,8 @@
   cv <- .ba_read_matrix(file.path(design$dir, entry$files$coverage))
   sites <- sites[match(rownames(cv), sites$feature_id), , drop = FALSE]
   ctx <- if (!is.null(sites$context) && !isTRUE(args$pool_contexts)) sites$context else "all"
-  w <- paste0(sites$chr, ":", (sites$pos %/% win) * win + 1L, if (length(ctx) > 1) paste0(":", ctx) else "")
+  # positions are 1-based (Bismark, DSS): window k covers (k-1)*win+1 .. k*win
+  w <- paste0(sites$chr, ":", ((sites$pos - 1L) %/% win) * win + 1L, if (length(ctx) > 1) paste0(":", ctx) else "")
   M <- rowsum(me[, colnames(cv), drop = FALSE], w); C <- rowsum(cv, w)
   Y <- log2((M + 0.5) / (C - M + 0.5))
   Y[C < min_cov] <- NA

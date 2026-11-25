@@ -18,7 +18,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Depends: R (>= 4.1)
 Imports: jsonlite, Matrix, stats, utils
-Suggests: BGLR, BiocGenerics, bsseq, DESeq2, DSS, edgeR, GenomeInfoDb, ggplot2, glmmTMB,
+Suggests: BGLR, BiocGenerics, bsseq, Rsamtools, Rsubread, DESeq2, DSS, edgeR, GenomeInfoDb, ggplot2, glmmTMB,
     limma, lme4, lmerTest, MASS, ordinal, patchwork, ranger, reformulas, rrBLUP, simitall,
     survival, testthat (>= 3.0.0), tximport, variancePartition
 Remotes: nirwan1265/simitall

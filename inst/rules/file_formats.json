@@ -1,5 +1,5 @@
 {
-  "_about": "How Bioana turns a user's files into data sets. sample_name_strip: regexes removed from file and column names (in order) to get the sample id. assay_data_type: which data type a count matrix becomes for each assay label (study_spec assays / assay_kinds or the assay argument); counts default to feature_counts.",
+  "_about": "How Bioana turns a user's files into data sets. sample_name_strip: regexes removed from file and column names (in order) to get the sample id. assay_data_type: which data type a count matrix becomes for each assay label (study_spec assays / assay_kinds or the assay argument); counts default to feature_counts. chip_fragment_bp: single-end ChIP/ATAC/CUT&Tag reads are extended to this fragment length before counting (DiffBind's fragmentSize default).",
   "sample_name_strip": [
     "^.*/",
     "\\.gz$",
@@ -33,5 +33,6 @@
     "rip_seq": "ip_input_counts"
   },
   "ip_suffix": "[._-](ip|IP|Ip)$",
-  "input_suffix": "[._-](input|Input|INPUT)$"
+  "input_suffix": "[._-](input|Input|INPUT)$",
+  "chip_fragment_bp": 125
 }

@@ -182,7 +182,9 @@
   Xf <- d$X[, colnames(d$X) != "(Intercept)", drop = FALSE]
   X2 <- rbind(cbind(U, ip = 1, Xf), cbind(U, ip = 0, Xf * 0))
   colnames(X2) <- c(colnames(U), "ip", paste0("ip:", colnames(Xf)))
-  y <- edgeR::DGEList(cbind(ip, inp))
+  both <- cbind(ip, inp)
+  colnames(both) <- c(paste0("ip_", d$ids), paste0("input_", d$ids))
+  y <- edgeR::DGEList(both)
   # offsets as the native method: input by library size, IP by its median ratio to input (IP efficiency per unit)
   sf_in <- colSums(inp) / mean(colSums(inp))
   sf_ip <- apply((ip + 1) / sweep(inp + 1, 2, sf_in, "/"), 2, stats::median)

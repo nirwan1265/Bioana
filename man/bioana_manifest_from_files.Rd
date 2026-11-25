@@ -10,7 +10,10 @@ bioana_manifest_from_files(
   assay = NULL,
   tx2gene = NULL,
   strandedness = "auto",
-  append = TRUE
+  append = TRUE,
+  annotation = NULL,
+  libraries = NULL,
+  window_bp = 200L
 )
 }
 \arguments{
@@ -30,6 +33,16 @@ Salmon and kallisto: transcripts are summed to genes by tximport.}
 \code{"forward"} or \code{"reverse"}.}
 
 \item{append}{Keep the data sets already in the manifest.}
+
+\item{annotation}{For BAM files: a GTF (genes; exon windows for IP/input
+assays), a SAF table, or peak BED / narrowPeak files (merged into consensus
+peaks present in at least 2 files).}
+
+\item{libraries}{For BAM files: a data frame with \code{file} (BAM file name or
+path), \code{sample_id}, and \code{library} (\code{rna}, \code{chip}, \code{control}, \code{ip},
+\code{input}). Without it, each BAM is one sample named after its file.}
+
+\item{window_bp}{Window size for IP/input assays (exon windows from the GTF).}
 }
 \value{
 Invisibly, the manifest entries; prints one line per data set.

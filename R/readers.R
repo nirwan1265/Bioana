@@ -19,7 +19,7 @@ bioana_detect_format <- function(files) {
   ff <- .ba_formats()
   out <- lapply(files, function(f) {
     if (!file.exists(f)) stop("File not found: ", f, call. = FALSE)
-    head <- .ba_head_lines(f)
+    head <- if (grepl("\\.(bam|cram)$", f)) character() else .ba_head_lines(f)
     first <- head[!grepl("^#", head)][1] %||% ""
     cols <- strsplit(first, if (grepl("\\.csv(\\.gz)?$", f)) "," else "\t", fixed = TRUE)[[1]]
     hit <- NA_integer_
@@ -57,9 +57,17 @@ bioana_detect_format <- function(files) {
 #' @param strandedness For STAR ReadsPerGene: `"auto"`, `"unstranded"`,
 #'   `"forward"` or `"reverse"`.
 #' @param append Keep the data sets already in the manifest.
+#' @param annotation For BAM files: a GTF (genes; exon windows for IP/input
+#'   assays), a SAF table, or peak BED / narrowPeak files (merged into consensus
+#'   peaks present in at least 2 files).
+#' @param libraries For BAM files: a data frame with `file` (BAM file name or
+#'   path), `sample_id`, and `library` (`rna`, `chip`, `control`, `ip`,
+#'   `input`). Without it, each BAM is one sample named after its file.
+#' @param window_bp Window size for IP/input assays (exon windows from the GTF).
 #' @return Invisibly, the manifest entries; prints one line per data set.
 #' @export
-bioana_manifest_from_files <- function(dir, files, assay = NULL, tx2gene = NULL, strandedness = "auto", append = TRUE) {
+bioana_manifest_from_files <- function(dir, files, assay = NULL, tx2gene = NULL, strandedness = "auto", append = TRUE,
+                                       annotation = NULL, libraries = NULL, window_bp = 200L) {
   meta <- utils::read.delim(file.path(dir, "sample_metadata_template.tsv"), stringsAsFactors = FALSE, colClasses = "character")
   spec <- jsonlite::read_json(file.path(dir, "study_spec.json"))
   assay <- assay %||% .ba_spec_assay(spec)
@@ -68,15 +76,21 @@ bioana_manifest_from_files <- function(dir, files, assay = NULL, tx2gene = NULL,
     stop("Format not recognised (see inst/rules/file_formats.tsv): ", paste(det$file[is.na(det$format)], collapse = ", "), call. = FALSE)
   }
   groups <- split(det, ifelse(det$per_sample, det$format, paste0(det$format, "::", det$file)))
+  old <- if (append && file.exists(file.path(dir, "data_manifest.json"))) jsonlite::read_json(file.path(dir, "data_manifest.json"))$data else list()
+  old_ids <- vapply(old, `[[`, "", "id")
+  old_src <- lapply(old, function(o) sort(unlist(o$source$files)))
   entries <- list()
   for (g in groups) {
     ff <- .ba_formats(); row <- ff[ff$format == g$format[1], ]
     reader <- get(row$reader, envir = asNamespace("bioana"))
-    x <- reader(g$file, tx2gene = tx2gene, strandedness = strandedness)
-    e <- .ba_entry_from_read(x, g, row, dir, meta, assay, entries)
+    x <- reader(g$file, tx2gene = tx2gene, strandedness = strandedness, annotation = annotation,
+                libraries = libraries, assay = assay, window_bp = window_bp)
+    # same source files as an existing entry: replace it; otherwise a new id
+    same <- which(vapply(old_src, identical, logical(1), sort(normalizePath(g$file))))
+    taken <- c(stats::setNames(vector("list", length(old_ids)), old_ids)[setdiff(seq_along(old_ids), same)], entries)
+    e <- .ba_entry_from_read(x, g, row, dir, meta, assay, taken, id = if (length(same)) old_ids[same[1]] else NULL)
     entries[[e$id]] <- e
   }
-  old <- if (append && file.exists(file.path(dir, "data_manifest.json"))) jsonlite::read_json(file.path(dir, "data_manifest.json"))$data else list()
   old <- Filter(function(o) !o$id %in% names(entries), old)
   all <- c(old, unname(entries))
   do.call(bioana_write_manifest, c(list(dir), all))
@@ -153,6 +167,12 @@ bioana_consensus_peaks <- function(files, out, min_samples = 2L) {
       ids[ok] <- meta$sample_id[m[ok]]
     }
   }
+  # last pass: a sample_id that is the only prefix of the name before _ . or - (S01_subset, S01.R1)
+  for (i in which(is.na(ids))) {
+    nm <- .ba_sample_name(names_in[i])
+    hit <- meta$sample_id[startsWith(nm, meta$sample_id) & substr(nm, nchar(meta$sample_id) + 1, nchar(meta$sample_id) + 1) %in% c("_", ".", "-")]
+    if (length(hit) == 1L) ids[i] <- hit
+  }
   ids
 }
 
@@ -165,7 +185,7 @@ bioana_consensus_peaks <- function(files, out, min_samples = 2L) {
 }
 
 # Build the manifest entry from what a reader returned, renaming samples to sample_id.
-.ba_entry_from_read <- function(x, g, row, dir, meta, assay, taken) {
+.ba_entry_from_read <- function(x, g, row, dir, meta, assay, taken, id = NULL) {
   rules <- .ba_format_rules()
   warn <- x$warnings %||% character()
   dt <- switch(x$gives,
@@ -179,8 +199,10 @@ bioana_consensus_peaks <- function(files, out, min_samples = 2L) {
   }
   base <- switch(dt, feature_counts = "counts", peak_counts_long = "peaks", bisulfite_counts = "methylation",
                  genotypes = "genotypes", methylation_beta = "methylation_array", ip_input_counts = "ip_input")
-  id <- base; k <- 2L
-  while (id %in% names(taken)) { id <- paste0(base, k); k <- k + 1L }
+  if (is.null(id)) {
+    id <- base; k <- 2L
+    while (id %in% names(taken)) { id <- paste0(base, k); k <- k + 1L }
+  }
   ddir <- file.path("data", id)
   rename <- function(m) {
     s <- .ba_match_samples(colnames(m), meta)
@@ -219,9 +241,10 @@ bioana_consensus_peaks <- function(files, out, min_samples = 2L) {
                            input = .ba_rel(.ba_write_matrix_tsv(rename(x$input), file.path(dir, ddir, "input.tsv")), dir)),
     genotypes = {
       dir.create(file.path(dir, ddir), recursive = TRUE, showWarnings = FALSE)
-      to <- file.path(dir, ddir, basename(g$file))
-      if (normalizePath(g$file) != normalizePath(to, mustWork = FALSE)) file.copy(g$file, to, overwrite = TRUE)
-      list(vcf = file.path(ddir, basename(g$file)))
+      vcf_src <- x$vcf %||% g$file
+      to <- file.path(dir, ddir, x$vcf_name %||% basename(vcf_src))
+      if (normalizePath(vcf_src) != normalizePath(to, mustWork = FALSE)) file.copy(vcf_src, to, overwrite = TRUE)
+      list(vcf = file.path(ddir, basename(to)))
     })
   samples <- switch(dt, genotypes = x$samples, bisulfite_counts = colnames(x$coverage), ip_input_counts = colnames(x$ip),
                     methylation_beta = colnames(x$beta), colnames(x$counts))
@@ -341,4 +364,144 @@ bioana_consensus_peaks <- function(files, out, min_samples = 2L) {
   }
   if (all(v >= 0 & v <= 1)) return(list(gives = "beta", beta = m, reader = "feature x sample table of methylation beta values"))
   stop("Table ", files, ": values are neither counts (non-negative integers) nor beta values (0-1). Give raw counts, not normalised values: the engines need them.", call. = FALSE)
+}
+
+# ---- BAM: Rsubread featureCounts --------------------------------------------
+
+# Library table for BAM files: file, sample_id, library. Without one, each file is a sample (library from the assay).
+.ba_bam_libraries <- function(files, libraries, assay) {
+  if (is.null(libraries)) {
+    lib <- if (!is.null(assay) && grepl("chip|cut|atac|dnase", assay)) "chip" else "rna"
+    return(data.frame(file = files, sample_id = .ba_sample_name(files), library = lib, stringsAsFactors = FALSE))
+  }
+  libraries <- as.data.frame(libraries, stringsAsFactors = FALSE)
+  m <- match(basename(files), basename(libraries$file))
+  if (anyNA(m)) stop("BAM files missing from libraries$file: ", paste(basename(files)[is.na(m)], collapse = ", "), call. = FALSE)
+  data.frame(file = files, sample_id = libraries$sample_id[m], library = tolower(libraries$library[m]), stringsAsFactors = FALSE)
+}
+
+# SAF from the annotation: GTF genes (exons per gene_id), GTF exon windows, a SAF file, or peak files.
+.ba_saf <- function(annotation, mode, window_bp = 200L) {
+  if (is.null(annotation)) stop("BAM files need annotation = a GTF, a SAF file, or peak files", call. = FALSE)
+  if (length(annotation) == 1L && grepl("\\.saf(\\.gz)?$", annotation, ignore.case = TRUE)) {
+    saf <- utils::read.delim(annotation, stringsAsFactors = FALSE)
+    return(list(saf = saf, what = sprintf("SAF %s (%d regions)", basename(annotation), nrow(saf))))
+  }
+  if (length(annotation) == 1L && grepl("\\.gtf(\\.gz)?$", annotation)) {
+    g <- utils::read.delim(annotation, header = FALSE, comment.char = "#", stringsAsFactors = FALSE, quote = "")
+    g <- g[g$V3 == "exon", ]
+    gid <- sub('.*gene_id "([^"]+)".*', "\\1", g$V9)
+    if (mode != "windows") {
+      return(list(saf = data.frame(GeneID = gid, Chr = g$V1, Start = g$V4, End = g$V5, Strand = g$V7),
+                  what = sprintf("GTF %s exons by gene_id (%d genes)", basename(annotation), length(unique(gid)))))
+    }
+    # exon windows: merge each gene's exons, tile in window_bp steps
+    w <- do.call(rbind, lapply(split(data.frame(chr = g$V1, s = g$V4, e = g$V5, strand = g$V7, gid = gid), gid), function(x) {
+      x <- x[order(x$s), ]; grp <- cumsum(c(TRUE, x$s[-1] > cummax(x$e)[-nrow(x)]))
+      ex <- data.frame(s = tapply(x$s, grp, min), e = tapply(x$e, grp, max))
+      do.call(rbind, lapply(seq_len(nrow(ex)), function(i) {
+        st <- seq(ex$s[i], ex$e[i], by = window_bp)
+        data.frame(Chr = x$chr[1], Start = st, End = pmin(st + window_bp - 1L, ex$e[i]), Strand = x$strand[1], gene = x$gid[1])
+      }))
+    }))
+    w$GeneID <- sprintf("%s:%s:%d-%d", w$gene, w$Chr, w$Start, w$End)
+    return(list(saf = w[, c("GeneID", "Chr", "Start", "End", "Strand")],
+                what = sprintf("GTF %s exon windows of %d bp (%d windows in %d genes)", basename(annotation), window_bp, nrow(w), length(unique(w$gene)))))
+  }
+  # peak files: consensus peaks present in >= 2 files (or the one file)
+  tmp <- tempfile(fileext = ".saf")
+  bioana_consensus_peaks(annotation, tmp, min_samples = min(2L, length(annotation)))
+  saf <- utils::read.delim(tmp, stringsAsFactors = FALSE)
+  list(saf = saf, what = sprintf("consensus of %d peak files, regions in >= %d files (%d regions)", length(annotation), min(2L, length(annotation)), nrow(saf)))
+}
+
+.ba_read_bam <- function(files, annotation = NULL, libraries = NULL, assay = NULL, window_bp = 200L, strandedness = "auto", ...) {
+  if (!requireNamespace("Rsubread", quietly = TRUE)) stop("Counting reads in BAM files needs Rsubread (Bioconductor).", call. = FALSE)
+  lib <- .ba_bam_libraries(files, libraries, assay)
+  ipin <- any(lib$library %in% c("ip", "input"))
+  sa <- .ba_saf(annotation, if (ipin) "windows" else "genes", window_bp)
+  paired <- .ba_bam_paired(files[1])
+  strand <- switch(strandedness, forward = 1L, reverse = 2L, 0L)
+  # ChIP-type single-end reads are extended to the fragment length before counting, as DiffBind
+  # (fragmentSize = 125) and csaw do; rules: file_formats.json chip_fragment_bp
+  chip <- any(lib$library %in% c("chip", "control")) && !paired
+  ext <- 0L
+  if (chip) ext <- max(0L, as.integer(.ba_format_rules()$chip_fragment_bp %||% 125L) - .ba_bam_read_length(files[1]))
+  utils::capture.output(fc <- Rsubread::featureCounts(files, annot.ext = sa$saf, isGTFAnnotationFile = FALSE, isPairedEnd = paired,
+                                                     countReadPairs = paired, strandSpecific = strand, allowMultiOverlap = ipin || chip,
+                                                     readExtension3 = ext,
+                                                     nthreads = 2L, verbose = FALSE))
+  m <- fc$counts
+  colnames(m) <- lib$sample_id[match(colnames(m), make.names(basename(files)))]
+  if (anyNA(colnames(m))) colnames(m) <- lib$sample_id
+  st <- fc$stat; assigned <- colSums(st[st$Status == "Assigned", -1, drop = FALSE])
+  reader <- sprintf("Rsubread::featureCounts %s (%s; isPairedEnd = %s, strandSpecific = %d%s%s); %s of reads assigned",
+                    utils::packageVersion("Rsubread"), sa$what, paired, strand, if (ipin || chip) ", allowMultiOverlap = TRUE" else "",
+                    if (ext > 0) sprintf(", readExtension3 = %d (reads extended to %d bp fragments)", ext, ext + .ba_bam_read_length(files[1])) else "",
+                    paste0(round(100 * sum(assigned) / sum(colSums(st[, -1, drop = FALSE]))), "%"))
+  if (ipin) {
+    ip <- m[, lib$library == "ip", drop = FALSE]; inp <- m[, lib$library == "input", drop = FALSE]
+    s <- intersect(colnames(ip), colnames(inp))
+    warn <- if (length(setdiff(union(colnames(ip), colnames(inp)), s))) sprintf("IP or input without its pair left out: %s", paste(setdiff(union(colnames(ip), colnames(inp)), s), collapse = ", ")) else character()
+    return(list(gives = "ip_input", ip = ip[, s, drop = FALSE], input = inp[, s, drop = FALSE], reader = reader, warnings = warn))
+  }
+  keep <- !lib$library %in% c("control", "input")
+  list(gives = "counts", counts = m[, keep, drop = FALSE], reader = reader,
+       warnings = if (any(!keep)) sprintf("%d control / input libraries not used in the test", sum(!keep)) else character())
+}
+
+# ---- HapMap -> VCF -----------------------------------------------------------
+
+.ba_read_hapmap <- function(files, ...) {
+  x <- utils::read.delim(files, check.names = FALSE, stringsAsFactors = FALSE, colClasses = "character")
+  al <- strsplit(x$alleles, "/", fixed = TRUE)
+  ref <- vapply(al, `[`, "", 1); alt <- vapply(al, function(a) if (length(a) > 1) a[2] else ".", "")
+  calls <- as.matrix(x[, -(1:11), drop = FALSE])
+  a1 <- substr(calls, 1, 1); a2 <- substr(calls, nchar(calls), nchar(calls))
+  code <- function(a) ifelse(a == ref, "0", ifelse(a == alt, "1", "."))
+  gt <- matrix(paste0(code(a1), "/", code(a2)), nrow(calls))
+  gt[gt == "1/0"] <- "0/1"; gt[grepl("\\.", gt)] <- "./."
+  keep <- alt != "." & grepl("^[ACGT]$", ref) & grepl("^[ACGT]$", alt)
+  out <- tempfile(fileext = ".vcf")
+  con <- file(out, "w")
+  writeLines(c("##fileformat=VCFv4.2", sprintf("##source=bioana HapMap conversion of %s", basename(files)),
+               paste(c("#CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT", colnames(calls)), collapse = "\t")), con)
+  body <- paste(x$chrom[keep], x$pos[keep], x[[1]][keep], ref[keep], alt[keep], ".", "PASS", ".", "GT",
+                apply(gt[keep, , drop = FALSE], 1, paste, collapse = "\t"), sep = "\t")
+  writeLines(body, con); close(con)
+  list(gives = "genotypes", samples = colnames(calls), vcf = out, vcf_name = "genotypes.vcf",
+       reader = sprintf("HapMap -> VCF (%d of %d biallelic SNPs; two-letter calls)", sum(keep), nrow(x)),
+       warnings = if (any(!keep)) sprintf("%d non-biallelic or indel markers dropped", sum(!keep)) else character())
+}
+
+# ---- DSS text: chr, pos, N, X per sample -------------------------------------
+
+.ba_read_dss_txt <- function(files, ...) {
+  rows <- lapply(files, function(f) {
+    x <- utils::read.delim(f, stringsAsFactors = FALSE)
+    data.frame(chr = x$chr, pos = x$pos, context = NA_character_, m = x$X, u = x$N - x$X)
+  })
+  samples <- vapply(files, function(f) .ba_sample_name(sub("\\.(txt|tsv)(\\.gz)?$", "", basename(f))), "")
+  key <- unique(do.call(rbind, lapply(rows, function(r) r[, c("chr", "pos")])))
+  key$feature_id <- paste(key$chr, key$pos, sep = ":")
+  me <- cv <- matrix(0, nrow(key), length(files), dimnames = list(key$feature_id, samples))
+  for (j in seq_along(rows)) { r <- rows[[j]]; k <- match(paste(r$chr, r$pos, sep = ":"), key$feature_id); me[k, j] <- r$m; cv[k, j] <- r$m + r$u }
+  list(gives = "bisulfite", sites = data.frame(feature_id = key$feature_id, chr = key$chr, pos = key$pos),
+       methylated = me, coverage = cv, reader = "DSS/BSmooth count text: chr, pos, N (reads), X (methylated), one file per sample")
+}
+
+# Paired-end if any of the first 1000 reads has the paired flag (no index needed).
+.ba_bam_paired <- function(f) {
+  if (!requireNamespace("Rsamtools", quietly = TRUE)) return(FALSE)
+  bf <- Rsamtools::BamFile(f, index = character(0), yieldSize = 1000L)
+  open(bf); on.exit(close(bf))
+  fl <- Rsamtools::scanBam(bf, param = Rsamtools::ScanBamParam(what = "flag"))[[1]]$flag
+  any(bitwAnd(fl, 1L) > 0)
+}
+
+# Median read length of the first 1000 reads.
+.ba_bam_read_length <- function(f) {
+  bf <- Rsamtools::BamFile(f, index = character(0), yieldSize = 1000L)
+  open(bf); on.exit(close(bf))
+  as.integer(stats::median(Rsamtools::scanBam(bf, param = Rsamtools::ScanBamParam(what = "qwidth"))[[1]]$qwidth, na.rm = TRUE))
 }

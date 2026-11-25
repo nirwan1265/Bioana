@@ -132,6 +132,22 @@ DMR windows (FDR 0.06); m6A 2/40 (5 per group is little power for m6A);
 small RNA and microbiome 0 found (the real templates vary a lot between
 samples: signs right, r 0.75 and 0.42, but 5 per group is not enough).
 
+## Real test data (2026-11-24)
+
+github.com/nirwan1265/bioana-testdata holds small real data sets (airway
+BAMs, DiffBind ChIP chr18 1-20 Mb, exomePeak2 MeRIP BAMs, TASSEL maize 282
+panel, rrBLUP source); its README gives sources and citations.
+`tests/testthat/test-real-data.R` uses it via `BIOANA_TESTDATA` or a clone
+next to `bioana/`, and skips otherwise. Keep data out of this repo:
+`inst/extdata/real/` holds only the 380 KB airway counts for
+`bioana_example()`.
+
+Known gap: on the DiffBind ChIP data Bioana calls fewer DB sites than
+DiffBind (52-96 vs 167-284 of 314). DiffBind subtracts input reads (its folds
+are about 1.5x Bioana's; subtracting input reproduces that) and the rest is
+not yet explained. Running DiffBind itself (not installable in the build
+environment) on the same subset would close it.
+
 ## Level order (2026-11-23, tell Simitall)
 
 `R/read_design.R` changed: `.ba_parse_model()` now returns `levels` (the spec
