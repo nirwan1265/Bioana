@@ -339,3 +339,20 @@ test_that("unplanted calls driven by Simitall hidden factors are reported apart 
   expect_lte(gr$called_not_planted, 0.1 * gr$n_called)
   expect_equal(gr$called_other_planted + gr$called_hidden_factor + gr$called_not_planted, gr$called_outside_goal)
 })
+
+test_that("per-level truth is scored only under treatment_effect; with an interaction in the model the report says which level", {
+  skip_if_not_installed("DESeq2")
+  w <- within_folder()
+  utils::capture.output(r <- bioana_analyze(w$dir, only = "rna", secondary = FALSE))
+  expect_null(r$summary$analyses$rna$recovery)
+  expect_false(is.null(r$summary$analyses$rna$goal_recovery))
+  s <- jsonlite::read_json(file.path(w$dir, "study_spec.json"))
+  s$analysis$goals <- NULL; s$analysis$primary_goal <- NULL; s$analysis$goal_terms <- NULL; s$analysis$goal_effect <- NULL
+  jsonlite::write_json(s, file.path(w$dir, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  out <- utils::capture.output(r <- bioana_analyze(w$dir, only = "rna", secondary = FALSE))
+  a <- r$summary$analyses$rna
+  expect_equal(a$goal$id, "treatment_effect")
+  expect_false(is.null(a$recovery))
+  expect_match(a$recovery_note, "reference level of time \\(0\\)")
+  expect_true(any(grepl("truth: model has treatment:time", out)))
+})

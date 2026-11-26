@@ -1,3 +1,12 @@
+# bioana 0.7.6
+
+- Per-level truth (Simitall `truth.file`) is scored only when the goal is `treatment_effect`; under interaction,
+  time_course or trend the goal is scored by `goal_recovery` (no more "found 0/200" for an untested contrast).
+- With an interaction in the model, the report says each treatment coefficient is the effect at the reference level
+  of the other factor (`recovery_note`).
+- Checked with Biodes 38dce99 level names: two-level factors use the first level as reference
+  (`treatmentdrought:treatment2mutant`).
+
 # bioana 0.7.5
 
 - Simitall hidden factors (`sim_truth.json` `counts.hidden_factors`, or under `assays.<assay>`): unplanted calls

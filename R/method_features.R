@@ -23,9 +23,25 @@
   if (!is.null(entry$truth$goal) && !is.null(ft$summary$goal)) {
     ft$summary$goal_recovery <- .ba_goal_recovery_features(entry, design$dir, ft$summary$goal, ft$table, alpha, ft$goal_design)
   }
-  if (!is.null(truth) && (identical(ft$summary$goal$test, "lrt") || identical(ft$summary$goal$id, "trend"))) {
-    # the condition contrasts are not in a joint test or a trend (numeric) model; the goal is scored by goal_recovery
+  g <- ft$summary$goal
+  if (!is.null(truth) && !is.null(g) && !identical(g$id, "treatment_effect")) {
+    # per-level truth scores the treatment contrasts; under another goal (interaction, time_course, trend)
+    # those contrasts are not what was tested, and the goal is scored by goal_recovery
     truth <- NULL
+  }
+  if (!is.null(truth)) {
+    # in a model with an interaction, a treatment coefficient is the effect at the reference level of the
+    # other factor: equal to Simitall's per-level truth only when the planted effect is the same at every level
+    p <- design$parsed
+    tv <- names(p$col)[vapply(names(p$col), function(v) identical(as.character(p$col[[v]]), truth$term %||% "") || identical(v, truth$term %||% ""), logical(1))]
+    tv <- if (length(tv)) tv[1] else "treatment"
+    inter <- p$fixed_labels[grepl(":", p$fixed_labels) & vapply(p$fixed_labels, function(l) tv %in% all.vars(str2lang(l)), logical(1))]
+    if (length(inter)) {
+      others <- setdiff(unique(unlist(lapply(inter, function(l) all.vars(str2lang(l))))), tv)
+      ft$summary$recovery_note <- sprintf("model has %s: each %s coefficient is the effect at the reference level of %s (%s); scored against Simitall's per-level effects",
+        paste(inter, collapse = ", "), tv, paste(others, collapse = ", "),
+        paste(vapply(others, function(o) (p$levels[[o]] %||% "first level")[1], ""), collapse = ", "))
+    }
   }
   if (!is.null(truth)) {
     if (identical(truth$kind, "regions")) {

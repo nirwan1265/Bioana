@@ -149,6 +149,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     if (!is.null(g$result$p)) cat(sprintf("      %s: statistic %.3g on %g df, p = %.3g\n", g$label, g$result$statistic, g$result$df, g$result$p))
     if (!is.null(g$note)) cat(sprintf("      goal: %s\n", g$note))
     if (!is.null(g$scale_note)) cat(sprintf("      trend: %s\n", g$scale_note))
+    if (!is.null(a$recovery_note)) cat(sprintf("      truth: %s\n", a$recovery_note))
     gr <- a$goal_recovery
     if (!is.null(gr)) cat(sprintf("      goal truth (%s, terms %s%s): %s\n", gr$goal, paste(unlist(gr$model_terms), collapse = ", "),
       if (isFALSE(gr$terms_match)) ", NOT the terms Bioana tested" else "",
