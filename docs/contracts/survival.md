@@ -39,6 +39,14 @@ Bioana 0.10.0 runs a full survival analysis for `primary_outcome.type = "surviva
 - Simitall 3f82312: hazard-ratio truth is compared with the Cox coefficient on the log scale
   (`true_log_hazard_ratio`), time-ratio truth with survreg of `outcome_model.family`.
 
+## Read since (Bioana 0.11.2)
+
+- Biodes 825068a `goal_effect.survival.proportional_hazards: false`, `test: "logrank_fh_0_1"`; Simitall
+  76d66c0 `outcome_model.change_time` / family: non-PH goals are scored with the weighted log-rank and a
+  piecewise Cox HR (see NEWS 0.11.2).
+- RCBD blocks as fixed terms in Cox models: Bioana fits >= 10 blocks as a shared frailty, fewer as strata.
+  Biodes may keep writing `y ~ treatment + block`.
+
 ## Simitall
 
 1. Survival is now log-normal AFT only (hazards not proportional). Bioana scores that goal truth

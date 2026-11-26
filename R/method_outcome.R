@@ -71,6 +71,20 @@
     lv <- unique(frame$y_[!is.na(frame$y_)]); lv <- c(intersect(cats, lv), sort(setdiff(lv, cats)))
     frame$y_ <- factor(frame$y_, levels = lv)
   }
+  if (type == "survival") {
+    # fixed block terms in a Cox model (survival_rules.json): many blocks -> shared frailty, few -> strata (surv_rhs)
+    sr_ <- .ba_rules("survival_rules")
+    for (l in p$fixed_labels) {
+      v <- all.vars(str2lang(l))
+      if (length(v) != 1L || !identical(p$role[[v]], "block")) next
+      nb <- length(unique(stats::na.omit(frame[[v]])))
+      if (nb >= (sr_$frailty_min_blocks %||% 10)) {
+        f <- stats::update(f, stats::as.formula(sprintf(". ~ . - %s + (1 | %s)", v, v)))
+        p$fixed_labels <- setdiff(p$fixed_labels, l)
+        warn <- c(warn, sprintf("block term %s (%d blocks) fitted as a shared frailty (1 | %s): fixed coefficients for many small blocks diverge (survival_rules.json)", v, nb, v))
+      } else warn <- c(warn, sprintf("block term %s (%d blocks) fitted as strata(%s) in the Cox model", v, nb, v))
+    }
+  }
   has_random <- length(.ba_findbars(f)) > 0
   fixed_f <- .ba_nobars(f)
   # the chain sees the random terms of the formula actually fitted (nested subsamples add one)
@@ -87,11 +101,12 @@
   if (identical(plan$test, "lrt")) {
     # the reduced model: the same engine on the full model matrix without the goal's columns (a formula
     # without the terms would re-code the rest, e.g. treatment + treatment:time spans the full model)
-    rhs <- stats::reformulate(c("1", p$fixed_labels))
+    blk_lab <- if (type == "survival") p$fixed_labels[vapply(p$fixed_labels, function(l) { v <- all.vars(str2lang(l)); length(v) == 1L && identical(p$role[[v]], "block") }, logical(1))] else character()
+    rhs <- stats::reformulate(c("1", setdiff(p$fixed_labels, blk_lab)))
     X <- stats::model.matrix(rhs, stats::model.frame(rhs, frame, na.action = stats::na.pass))
     X0 <- X[, !colnames(X) %in% c(plan$drop, "(Intercept)"), drop = FALSE]
     fr0 <- frame
-    fixed0 <- if (ncol(X0)) { fr0$X0_ <- X0; "X0_" } else character()
+    fixed0 <- c(if (ncol(X0)) { fr0$X0_ <- X0; "X0_" }, blk_lab)
     bars <- vapply(.ba_findbars(f), function(b) paste0("(", paste(deparse(b), collapse = ""), ")"), "")
     f0 <- stats::reformulate(c(if (length(fixed0)) fixed0 else "1", bars), response = "y_")
     p0 <- p; p0$fixed_labels <- fixed0
@@ -112,6 +127,13 @@
     warn <- c(warn, "glmmTMB: the Hessian is not positive definite (convergence problem)")
     diag_engine$pdHess <- FALSE
   }
+  if (type == "survival") {
+    pat <- paste(unlist(.ba_rules("survival_rules")$nonconvergence_patterns), collapse = "|")
+    if (nzchar(pat) && any(grepl(pat, rc$fit_warnings %||% character(), ignore.case = TRUE))) {
+      warn <- c(warn, "Cox fit did not converge (a coefficient may be infinite): estimates unreliable, goal truth not scored")
+      diag_engine$converged <- FALSE
+    }
+  }
   res <- .ba_coef_table(fit, type, frame, p)
   res$role <- vapply(res$term, function(t) .ba_coef_role(t, p), "")
   res$padj <- rep(NA_real_, nrow(res))
@@ -126,7 +148,7 @@
   # classical ANOVA next to the model (stat_tests.tsv): repeated-measures / mixed / factorial, post-hoc, effect sizes
   st <- NULL
   if (type %in% c("continuous", "ordinal", "binary", "nominal", "survival") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
-    st <- tryCatch(if (type == "survival") { fr <- frame; fr$event_ <- fr$event_raw_ %||% fr$event_; .ba_survival_tests(fr, p, design, goal, alpha, args, fit) }
+    st <- tryCatch(if (type == "survival") { fr <- frame; fr$event_ <- fr$event_raw_ %||% fr$event_; .ba_survival_tests(fr, design$parsed, design, goal, alpha, args, fit) }
                    else .ba_stat_tests(frame, p, design, goal, alpha, type, args),
                    error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
     for (k in c("km_curve", "survival_summary", "landmarks", "life_table", "cif_curve", "cells")) if (!is.null(st[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(st[[k]], file.path(outdir, paste0(k, ".tsv"))), k))
@@ -175,6 +197,10 @@
       aft <- if (type == "survival" && grepl("time ratio", gt$effect_scale %||% "")) .ba_aft_for_truth(frame, p, truth$outcome_model$family %||% "lognormal_aft") else NULL
       summary$goal_recovery <- .ba_goal_recovery_outcome(gt, summary$goal, if (!is.null(aft)) aft$res else res, alpha, if (!is.null(aft)) "aft" else type)
       if (!is.null(aft)) summary$goal_recovery$scale <- aft$scale
+      if (type == "survival" && (isFALSE(gt$proportional_hazards) || isFALSE(goal$effect$proportional_hazards)))
+        summary$goal_recovery <- .ba_goal_recovery_nonph(summary$goal_recovery, gt, truth$outcome_model, goal, design, frame, p, res, alpha)
+      if (isFALSE(diag_engine$converged)) { summary$goal_recovery$scored <- FALSE
+        summary$goal_recovery$note <- paste(c(summary$goal_recovery$note, "Cox fit did not converge: not scored"), collapse = "; ") }
     }
   }
   # a numeric (trend) term has no per-level truth: its slope is scored by goal_recovery
@@ -316,8 +342,15 @@
 .ba_fit_outcome <- function(eng, f, fixed_f, frame, type, p) {
   bars <- vapply(.ba_findbars(f), function(b) paste0("(", paste(deparse(b), collapse = ""), ")"), "")
   surv_rhs <- function(extra = character()) {
-    rhs <- c(p$fixed_labels, extra); if (!length(rhs)) rhs <- "1"
-    stats::as.formula(paste("survival::Surv(y_, event_) ~", paste(rhs, collapse = " + ")))
+    # fixed block terms -> strata(block) (survival_rules.json cox_block_terms): coefficients for many small blocks diverge
+    lab <- p$fixed_labels
+    if (.ba_rules("survival_rules")$cox_block_terms %in% c("strata", "frailty_or_strata")) {   # blocks still fixed here are the few-block case
+      blk <- vapply(lab, function(l) { v <- all.vars(str2lang(l)); length(v) == 1L && identical(p$role[[v]], "block") }, logical(1))
+      lab[blk] <- sprintf("strata(%s)", lab[blk])
+    }
+    rhs <- c(lab, extra); if (!length(rhs)) rhs <- "1"
+    stats::as.formula(paste("survival::Surv(y_, event_) ~", paste(rhs, collapse = " + ")),
+                      env = list2env(list(strata = survival::strata, cluster = survival::cluster), parent = parent.frame()))   # cox.zph re-evaluates frame there
   }
   switch(eng,
     stats_lm = stats::lm(fixed_f, data = frame),

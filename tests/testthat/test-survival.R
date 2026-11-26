@@ -6,6 +6,7 @@ surv_run <- function(d, args = NULL) { utils::capture.output(r <- bioana_analyze
   r$summary$analyses$outcome$stat_test }
 trow <- function(st, pat) Filter(function(r) grepl(pat, r$statistic_name), st$table)
 cluster <- survival::cluster   # the cluster() special in coxph formulas below
+Surv <- survival::Surv
 lung_df <- function() { e <- new.env(); utils::data("cancer", package = "survival", envir = e); x <- e$lung
   x$sex <- factor(c("male", "female")[x$sex], c("male", "female")); x }
 
@@ -182,4 +183,86 @@ test_that("seeds on trays: subsamples kept (no averaging), tray = shared frailty
   expect_equal(gr$true_effect, 0.6); expect_match(gr$scale, "hazard ratio")
   expect_equal(gr$estimate, exp(r$results$outcome$estimate[r$results$outcome$term == "treatmentprimed"]))
   expect_true(gr$sign_agreement)
+})
+
+block_surv_folder <- function(nblocks, per_block_line, hr = 0.7, seed = 1) {
+  d <- file.path(tempfile("blk_"), "design"); dir.create(d, recursive = TRUE); set.seed(seed)
+  g <- expand.grid(rep = seq_len(per_block_line), line = c("B73", "Mo17"), block = sprintf("B%02d", seq_len(nblocks)), stringsAsFactors = FALSE)
+  g$unit <- sprintf("P%03d", seq_len(nrow(g))); g$sample_id <- g$unit
+  be <- stats::rnorm(nblocks, 0, 0.3)[match(g$block, sprintf("B%02d", seq_len(nblocks)))]
+  t <- (-log(stats::runif(nrow(g))) / (0.01 * exp(be) * ifelse(g$line == "Mo17", hr, 1)))^(1 / 1.5)
+  g$time <- pmin(round(t, 1), 90); g$event <- as.integer(t <= 90)
+  spec <- list(handoff_version = "0.6.6", origin = "planned", organism = "Zea mays", system = "field", factors = list(list(name = "line", n_levels = 2L, levels = list("B73", "Mo17"))),
+               design = list(chosen = "rcbd"), primary_outcome = list(name = "days to flowering", type = "survival", event_column = "event"),
+               analysis = list(model = "y ~ treatment + block", terms = list(treatment = "line", block = "block", layout_columns = list("line", "block"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(g[c("unit", "line", "block")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(g, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "time", event_column = "event"))
+  list(dir = d, data = g)
+}
+
+test_that("Cox with fixed blocks: few blocks -> strata(block) = coxph(strata); many small blocks -> shared frailty; stratified log-rank kept", {
+  f <- block_surv_folder(4, 15)
+  utils::capture.output(r <- bioana_analyze(f$dir, secondary = FALSE)); a <- r$summary$analyses$outcome
+  expect_match(paste(a$warnings, collapse = " "), "fitted as strata\\(block\\)")
+  m <- f$data; m$line <- factor(m$line, c("B73", "Mo17"))
+  ref <- survival::coxph(survival::Surv(time, event) ~ line + strata(block), data = m)
+  expect_equal(r$results$outcome$estimate[r$results$outcome$term == "treatmentMo17"], unname(stats::coef(ref)), tolerance = 1e-8)
+  f2 <- block_surv_folder(30, 1)
+  utils::capture.output(r2 <- bioana_analyze(f2$dir, secondary = FALSE)); a2 <- r2$summary$analyses$outcome
+  expect_match(paste(a2$warnings, collapse = " "), "shared frailty \\(1 \\| block\\)")
+  expect_true(a2$engine$engine %in% c("coxme", "coxph_frailty"))
+  expect_true(any(grepl("stratified log-rank", vapply(a2$stat_test$table, `[[`, "", "statistic_name"))))
+})
+
+test_that("delayed effect (non-PH truth): goal detected by the prespecified weighted log-rank; estimate = piecewise Cox HR after change_time", {
+  d <- file.path(tempfile("delay_"), "design"); dir.create(d, recursive = TRUE); set.seed(3)
+  n <- 240; g <- rep(c("unprimed", "primed"), each = n / 2); t0 <- 6; h0 <- 0.08; hr <- 0.6
+  e <- -log(stats::runif(n)); hz <- ifelse(g == "primed", hr, 1)
+  t <- ifelse(e <= h0 * t0, e / h0, t0 + (e - h0 * t0) / (h0 * hz))
+  m <- data.frame(unit = sprintf("S%03d", 1:n), sample_id = sprintf("S%03d", 1:n), priming = g, time = round(pmin(t, 21), 2), event = as.integer(t <= 21))
+  spec <- list(handoff_version = "0.6.6", origin = "planned", organism = "test", system = "lab", factors = list(list(name = "priming", n_levels = 2L, levels = list("unprimed", "primed"))),
+               design = list(chosen = "crd"), primary_outcome = list(name = "days", type = "survival", event_column = "event"),
+               analysis = list(model = "y ~ treatment", terms = list(treatment = "priming", layout_columns = list("priming")), goals = list("survival"), primary_goal = "survival",
+                               goal_terms = list(survival = list("treatment")), goal_effect = list(survival = list(size = 0.6, scale = "hazard_ratio", proportional_hazards = FALSE, test = "logrank_fh_0_1")),
+                               survival = list(logrank_weight = "fh_0_1")))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(m[c("unit", "priming")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(m, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  jsonlite::write_json(list(outcome_model = list(family = "delayed_effect", proportional_hazards = FALSE, change_time = t0),
+                            goal_truth = list(goal = "survival", model_terms = list("treatment"), status = "planted", true_effect = hr, true_log_hazard_ratio = log(hr),
+                                              proportional_hazards = FALSE, effect_scale = "hazard ratio, last level vs reference (after t = 6; 1 before)")),
+                       file.path(d, "sim_truth.json"), auto_unbox = TRUE, digits = NA)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "time", event_column = "event",
+                                truth = list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "survival", field = "goal_truth", terms = list("treatment"), test = "wald"))))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); gr <- r$summary$analyses$outcome$goal_recovery
+  expect_match(gr$test, "weighted log-rank fh_0_1"); expect_false(gr$proportional_hazards)
+  m$grp_ <- factor(m$priming, c("unprimed", "primed")); m$y_ <- m$time; m$event_ <- m$event
+  expect_equal(gr$p, bioana:::.ba_weighted_logrank(m, "fh_0_1")$p)
+  sp <- survival::survSplit(Surv(time, event) ~ priming, data = transform(m[c("time", "event", "priming")], priming = factor(priming, c("unprimed", "primed"))), cut = t0, episode = "ph")
+  sp$after <- (sp$priming == "primed") * (sp$ph == 2); sp$before <- (sp$priming == "primed") * (sp$ph == 1)
+  pc <- survival::coxph(survival::Surv(tstart, time, event) ~ before + after, data = sp)
+  expect_equal(gr$estimate, unname(exp(stats::coef(pc)["after"])), tolerance = 1e-8)
+  expect_equal(gr$true_effect, 0.6); expect_equal(gr$piecewise$affected_phase, "after")
+})
+
+test_that("a Cox fit that does not converge (separation) is flagged and its goal truth not scored", {
+  d <- file.path(tempfile("sep_"), "design"); dir.create(d, recursive = TRUE)
+  m <- data.frame(unit = sprintf("U%02d", 1:30), sample_id = sprintf("U%02d", 1:30), g = rep(c("a", "b"), each = 15),
+                  time = c(seq(2, 30, 2), rep(40, 15)), event = c(rep(1L, 15), rep(0L, 15)))
+  spec <- list(handoff_version = "0.6.6", origin = "planned", organism = "test", system = "lab", factors = list(list(name = "g", n_levels = 2L, levels = list("a", "b"))),
+               design = list(chosen = "crd"), primary_outcome = list(name = "days", type = "survival", event_column = "event"),
+               analysis = list(model = "y ~ treatment", terms = list(treatment = "g", layout_columns = list("g")), goals = list("survival"), primary_goal = "survival",
+                               goal_terms = list(survival = list("treatment"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(m[c("unit", "g")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(m, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  jsonlite::write_json(list(outcome_model = list(family = "weibull_ph"), goal_truth = list(goal = "survival", model_terms = list("treatment"), status = "planted",
+                       true_effect = 0.5, true_log_hazard_ratio = log(0.5), effect_scale = "hazard ratio")), file.path(d, "sim_truth.json"), auto_unbox = TRUE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "time", event_column = "event",
+                                truth = list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "survival", field = "goal_truth", terms = list("treatment"), test = "wald"))))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); a <- r$summary$analyses$outcome
+  expect_match(paste(a$warnings, collapse = " "), "did not converge")
+  expect_false(a$goal_recovery$scored)
 })

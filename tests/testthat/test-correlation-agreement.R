@@ -94,7 +94,7 @@ test_that("Fleiss' kappa = irr::kappam.fleiss and the tutorial (diagnoses, 3 rat
   cat_k <- function(c) m$estimate[m$measure == sprintf("Fleiss' kappa, category %s", c)]
   expect_equal(round(cat_k("1. Depression"), 3), 0.416); expect_equal(round(cat_k("4. Neurosis"), 3), 0.236); expect_equal(cat_k("5. Other"), 1)
   expect_equal(round(m$estimate[grepl("^Light", m$measure)], 3), 0.555)
-  expect_equal(m$estimate[grepl("^Light", m$measure)], irr::kappam.light(dg[, 1:3])$value, tolerance = 1e-10)
+  expect_equal(m$estimate[grepl("^Light", m$measure)], suppressWarnings(irr::kappam.light(dg[, 1:3]))$value, tolerance = 1e-10)   # irr warns: NaN z
   rows6 <- data.frame(unit = sprintf("P%02d", seq_len(nrow(dg))), lapply(dg, as.character), stringsAsFactors = FALSE)
   names(rows6)[-1] <- paste0("r", 1:6)
   x6 <- run_ca(meta_folder(rows6, list(agreement = list(raters = as.list(paste0("r", 1:6)), scale = "nominal"))), "agreement")

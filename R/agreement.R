@@ -48,8 +48,11 @@
         add(sprintf("Fleiss' kappa (%d raters)", k), fk$value, NA, NA, fk$statistic, fk$p.value)
         dt <- fk$detail
         if (!is.null(dt)) for (cg in rownames(dt)) add(sprintf("Fleiss' kappa, category %s", cg), dt[cg, "Kappa"], NA, NA, dt[cg, "z"], dt[cg, "p.value"])
-        lk <- irr::kappam.light(R_)
-        add(sprintf("Light's kappa (mean of %d pairwise Cohen's kappas)", choose(k, 2)), lk$value, NA, NA, lk$statistic, lk$p.value)
+        # irr's variance for Light's kappa can be negative (NaN z and p): kappa kept, test dropped with a note
+        lk <- withCallingHandlers(irr::kappam.light(R_), warning = function(w) if (grepl("NaN", conditionMessage(w))) invokeRestart("muffleWarning"))
+        z_ok <- is.finite(lk$statistic)
+        if (!z_ok) notes <- c(notes, "Light's kappa: irr's variance estimate is negative here, so no z or p")
+        add(sprintf("Light's kappa (mean of %d pairwise Cohen's kappas)", choose(k, 2)), lk$value, NA, NA, if (z_ok) lk$statistic else NA, if (z_ok) lk$p.value else NA)
       } else {
         notes <- c(notes, "Fleiss' kappa needs irr (not installed): Light's kappa (mean of pairwise Cohen's kappas, vcd) instead")
         pk <- utils::combn(k, 2, function(ij) .ba_vcd_kappa(table(F_[[ij[1]]], F_[[ij[2]]]), "Equal-Spacing")$u[1])

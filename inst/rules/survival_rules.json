@@ -2,7 +2,11 @@
   "_about": "Survival tests next to the Cox engine (R/survival_tests.R). The design picks what runs; Biodes may set analysis.survival = {landmarks: [times], rmst_tau: time, logrank_weight: name, aft: true | [distributions], life_table: interval width, strata: [factors]}. Checks (proportional hazards) are reported, never used to switch the primary test.",
   "conf_type": "log",
   "_note_conf_type": "survfit confidence intervals for survival and the median (survival package default; the median CI is the Brookmeyer-Crowley interval on this scale).",
-  "quantiles": [0.25, 0.5, 0.75],
+  "quantiles": [
+    0.25,
+    0.5,
+    0.75
+  ],
   "rmst_tau": "min_max_followup",
   "_note_rmst_tau": "default horizon: the smallest of the groups' largest follow-up times, so tau is inside every group's support (Tian et al. 2020). analysis.survival.rmst_tau overrides; the report says which.",
   "stratify_by_blocks": true,
@@ -10,9 +14,24 @@
   "logrank_weight": "logrank",
   "_note_logrank_weight": "names (survMisc::comp rows): logrank (FH 0,0), gehan (Gehan-Breslow), tarone_ware, peto (Peto-Peto, = survdiff rho 1), fh_1_0 (early), fh_0_1 (late), fh_1_1 (middle). Only the prespecified weight is the primary test; scanning weights for the smallest p is not done.",
   "pairwise_adjust": "holm",
-  "aft_distributions": ["weibull", "exponential", "lognormal", "loglogistic"],
+  "aft_distributions": [
+    "weibull",
+    "exponential",
+    "lognormal",
+    "loglogistic"
+  ],
   "_note_aft": "analysis.survival.aft = true fits every distribution and reports the time ratios of the lowest AIC (differences < 2 noted as indistinguishable); a list fits those. Weibull time ratios convert to hazard ratios: HR = TR^(-shape).",
   "ph_alpha": 0.05,
   "min_events_per_term": 10,
-  "_note_min_events_per_term": "Cox model with fewer events per coefficient than this is flagged (overfitting; Peduzzi et al. 1995)."
+  "_note_min_events_per_term": "Cox model with fewer events per coefficient than this is flagged (overfitting; Peduzzi et al. 1995).",
+  "cox_block_terms": "frailty_or_strata",
+  "_note_cox_block_terms": "fixed block terms (role block) in a Cox model: >= frailty_min_blocks blocks -> a shared frailty (1 | block) (the engine chain: coxme, else a gamma frailty); fewer -> strata(block). As fixed coefficients small blocks diverge and bias the HR toward 0 (Simitall check, 30 blocks of 2, true HR 0.7, 20 runs: fixed 0.50, strata 0.67, frailty 0.68, none 0.69; SD of log HR 0.57, 0.36, 0.32, 0.31). Same cut as Biodes' cluster rule.",
+  "nonconvergence_patterns": [
+    "may be infinite",
+    "converged before",
+    "Ran out of iterations",
+    "did not converge"
+  ],
+  "_note_nonph": "goal truth with proportional_hazards false (Simitall delayed_effect / early_effect / crossing): detection by the prespecified weighted log-rank (analysis.survival.logrank_weight or goal_effect.survival.test), estimate by a piecewise Cox fit split at outcome_model.change_time (HR per phase); the affected phase's HR is compared with the true HR.",
+  "frailty_min_blocks": 10
 }

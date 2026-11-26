@@ -1,3 +1,16 @@
+# bioana 0.11.2
+
+- Survival goal truth with non-proportional hazards (Simitall delayed_effect / early_effect / crossing; Biodes
+  `goal_effect.survival.proportional_hazards: false`, `test: logrank_fh_0_1`): detection by the prespecified weighted
+  log-rank, estimate by a piecewise Cox fit split at `change_time` (HR of the affected phase vs the true HR; the other
+  phase and the averaged Cox HR reported). Check run (240 seeds, delayed effect): FH(0,1) p 0.004, HR after day 6
+  0.57 vs true 0.6, before 1.16 vs 1, averaged Cox HR 0.71.
+- Fixed block terms in Cox models: >= 10 blocks -> shared frailty (1 | block), fewer -> strata(block)
+  (`survival_rules.json`). Fixed coefficients for 30 blocks of 2 biased the HR (20 runs, true 0.7: fixed 0.50,
+  strata 0.67, frailty 0.68). The survival layer keeps the stratified log-rank by block.
+- A Cox fit that does not converge (coefficient may be infinite) is flagged and its goal truth not scored.
+- irr's Light's kappa: its NaN z/p (negative variance) is caught; the kappa is kept with a note.
+
 # bioana 0.11.1
 
 - Fleiss' kappa through irr when installed: overall and per category (`detail = TRUE`), Light's kappa from

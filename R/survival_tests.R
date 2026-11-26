@@ -281,3 +281,43 @@
                         padj = co[, "p"], stringsAsFactors = FALSE, row.names = NULL),
        scale = sprintf("time ratio, estimate and p from survreg(dist = '%s'), matching Simitall's %s truth (the Cox hazard ratio is in the report)", dist, family))
 }
+
+# Goal truth with non-proportional hazards (Simitall delayed_effect / early_effect / crossing): one Cox HR averages
+# the phases. Detection: the prespecified weighted log-rank; estimate: piecewise Cox split at change_time, the HR of
+# the affected phase against the true HR (log scale), the other phase reported.
+.ba_goal_recovery_nonph <- function(out, gt, om, goal, design, frame, p, res, alpha) {
+  w <- design$spec$analysis$survival$logrank_weight %||% sub("^logrank_", "", goal$effect$test %||% "")
+  fam <- om$family %||% "delayed_effect"; t0 <- suppressWarnings(as.numeric(om$change_time %||% goal$effect$change_time))
+  treat <- names(p$col)[vapply(names(p$col), function(v) identical(p$role[[v]] %||% "treatment", "treatment") && v %in% names(frame) && !is.numeric(frame[[v]]), logical(1))]
+  if (!length(treat)) return(out)
+  d <- frame[!is.na(frame$y_) & !is.na(frame$event_), , drop = FALSE]
+  d$grp_ <- droplevels(factor(d[[treat[1]]])); lev <- levels(d$grp_)
+  cox_hr <- out$estimate
+  out$proportional_hazards <- FALSE; out$cox_hr_average <- cox_hr
+  notes <- sprintf("hazards not proportional (%s): one Cox HR (%s) averages the phases", fam, if (is.null(cox_hr)) "NA" else format(signif(cox_hr, 3)))
+  if (nzchar(w)) {
+    wr <- .ba_weighted_logrank(d, w)
+    if (!is.character(wr)) { out$p <- wr$p; out$detected <- isTRUE(wr$p < alpha); out$test <- sprintf("weighted log-rank %s (prespecified)", w) }
+    else notes <- c(notes, wr)
+  }
+  if (is.finite(t0) && length(lev) == 2L) {
+    sf <- stats::as.formula("Surv(y_, event_) ~ .", env = list2env(list(Surv = survival::Surv), parent = baseenv()))   # survSplit wants a literal Surv() on the left
+    sp <- survival::survSplit(sf, data = d[c("y_", "event_", "grp_")], cut = t0, episode = "phase_", start = "tstart_")
+    trt <- as.numeric(sp$grp_ == lev[2])
+    sp$hr_before_ <- trt * (sp$phase_ == 1); sp$hr_after_ <- trt * (sp$phase_ == 2)
+    pc <- tryCatch(survival::coxph(survival::Surv(tstart_, y_, event_) ~ hr_before_ + hr_after_, data = sp), error = function(e) NULL)
+    if (!is.null(pc)) {
+      b <- stats::coef(pc); se <- sqrt(diag(stats::vcov(pc)))
+      aff <- if (fam %in% c("early_effect", "crossing")) "hr_before_" else "hr_after_"
+      tl <- suppressWarnings(as.numeric(unlist(gt$true_log_hazard_ratio))); if (!length(tl)) tl <- log(as.numeric(unlist(gt$true_effect)))
+      out$estimate <- unname(exp(b[aff])); out$true_effect <- exp(tl)
+      out$bias <- unname(b[aff] - tl); out$covered <- unname(abs(b[aff] - tl) <= stats::qnorm(1 - alpha / 2) * se[aff])
+      out$sign_agreement <- unname(sign(b[aff]) == sign(tl))
+      out$piecewise <- list(change_time = t0, hr_before = unname(exp(b["hr_before_"])), hr_after = unname(exp(b["hr_after_"])),
+                            affected_phase = if (aff == "hr_after_") "after" else "before")
+      out$scale <- sprintf("hazard ratio %s t = %g (piecewise Cox split at change_time; log scale)", if (aff == "hr_after_") "after" else "before", t0)
+    }
+  } else if (!is.finite(t0)) notes <- c(notes, "no change_time in the truth: no piecewise estimate")
+  out$note <- paste(c(out$note, notes), collapse = "; ")
+  out
+}
