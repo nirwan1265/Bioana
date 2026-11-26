@@ -1,3 +1,16 @@
+# bioana 0.8.0
+
+- Classical ANOVA next to the model for continuous outcomes (`R/stat_tests.R`, rule table
+  `inst/rules/stat_tests.tsv`, rules `inst/rules/posthoc.json`): repeated-measures and mixed (split-plot)
+  ANOVA with Greenhouse-Geisser correction and Mauchly's test, factorial type III ANOVA, generalized and
+  partial eta squared (afex); post-hoc pairs, simple effects or vs-control contrasts by goal (emmeans);
+  outlier, normality and Levene checks reported, never used to switch tests. Writes `anova_table.tsv` and
+  `posthoc.tsv`. Equal to rstatix::anova_test, base aov(Error()), car::Anova type III and paired t-tests
+  (`test-stat-tests.R`). Not run, with the reason, when subjects miss a within cell (the mixed model keeps
+  them), with other random terms, or for a trend. `bioana_analyze(params = list(outcome = list(anova = FALSE)))`
+  turns it off.
+- Contract notes for Biodes (`analysis.posthoc`) and Simitall (correlated occasions): `docs/contracts/stat_tests.md`.
+
 # bioana 0.7.6
 
 - Per-level truth (Simitall `truth.file`) is scored only when the goal is `treatment_effect`; under interaction,

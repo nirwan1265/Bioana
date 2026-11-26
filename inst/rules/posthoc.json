@@ -1,0 +1,20 @@
+{
+  "_about": "Classical ANOVA and post-hoc rules (R/stat_tests.R, table stat_tests.tsv). The design picks the test; assumption checks are reported, not used to switch tests (pre-testing distorts error rates). Biodes may override with analysis.posthoc = {type: pairwise | vs_control | none, control: level, adjust: method}.",
+  "sphericity_correction": "GG",
+  "_note_sphericity_correction": "GG (Greenhouse-Geisser) for every within-subject term with more than two levels; 'girden': Huynh-Feldt when the GG epsilon > girden_threshold (Girden 1992), else GG; 'none'.",
+  "girden_threshold": 0.75,
+  "posthoc_type": "pairwise",
+  "adjust": "holm",
+  "_note_adjust": "p-value adjustment within each family of comparisons (one family per 'by' level, emmeans default). Holm: valid under any dependence and never less powerful than Bonferroni. vs_control uses dunnettx unless analysis.posthoc.adjust says otherwise.",
+  "adjust_vs_control": "dunnettx",
+  "emmeans_model": "multivariate",
+  "_note_emmeans_model": "within-subject contrasts from the multivariate model: each contrast has its own variance (a paired t-test when there are no between factors), so no sphericity assumption.",
+  "families": {
+    "treatment_effect": "main-effect pairs of each treatment factor (averaged over the others); simple effects of the first factor within each level of the second when two treatment factors interact",
+    "interaction": "simple effects: pairs of each goal factor within each level of the other",
+    "time_course": "pairs of time points within each group (within the named group for scope within_group)",
+    "trend": "none: the slope is the test"
+  },
+  "outlier_iqr": 3,
+  "_note_outlier_iqr": "extreme outliers: beyond Q1 - 3 IQR or Q3 + 3 IQR within a cell (rstatix::identify_outliers is.extreme)."
+}

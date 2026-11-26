@@ -159,6 +159,9 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
   DESeq2 Wald is liberal on null genes even with no goal planted (p<0.05 7.4%, p<0.001 0.67%);
   edgeR QL is calibrated (4.6%, 0.06%). Interaction goal: DESeq2 41 calls (12 unplanted), edgeR QL 0.
   Open: rule for small designs (DESeq2 useT, or edgeR QL first), for Nirwan to decide.
+- 2026-11-25 classical ANOVA (0.8.0): `docs/contracts/stat_tests.md`. Asks Biodes for an optional
+  `analysis.posthoc` {type, control, adjust}; asks Simitall for optional correlated occasions
+  (AR(1) / random slope) recorded in sim_truth.json. Neither blocks: Bioana runs without them.
 
 ## Packages
 

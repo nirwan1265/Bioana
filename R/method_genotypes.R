@@ -136,7 +136,7 @@
   }
   if (type != "continuous") warn <- c(warn, sprintf("%s outcome: line means on the link scale", type))
   oe <- list(id = "outcome", data_type = "outcome", column = entry$outcome_column %||% "primary_outcome", outcome_type = type)
-  out <- .ba_method_outcome(oe, design, file.path(tempdir(), "bioana_line_means"), args = list(subsamples = "aggregate"))
+  out <- .ba_method_outcome(oe, design, file.path(tempdir(), "bioana_line_means"), args = list(subsamples = "aggregate", anova = FALSE))
   fit <- out$fit
   warn <- c(warn, out$summary$warnings)
   frame <- stats::model.frame(fit)

@@ -150,6 +150,18 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     if (!is.null(g$note)) cat(sprintf("      goal: %s\n", g$note))
     if (!is.null(g$scale_note)) cat(sprintf("      trend: %s\n", g$scale_note))
     if (!is.null(a$recovery_note)) cat(sprintf("      truth: %s\n", a$recovery_note))
+    st <- a$stat_test
+    if (!is.null(st)) {
+      if (identical(st$status, "run")) {
+        cat(sprintf("      ANOVA [%s %s] %s%s: %s\n", st$package, st$version, c(within = "repeated measures", mixed = "mixed (split-plot)", between = "factorial")[[st$layout]],
+                    if (!identical(st$correction, "none")) sprintf(", %s-corrected", st$correction) else "",
+                    paste(vapply(st$table, function(r) sprintf("%s F(%.3g, %.3g) = %.3g, p = %.3g, ges %.2f", r$term, r$num_df, r$den_df, r$F, r$p, r$ges), ""), collapse = "; ")))
+        if (identical(st$posthoc$status, "run")) cat(sprintf("      post-hoc [emmeans %s] %s: %d comparisons (%s), %d with adjusted p < 0.05\n",
+          st$posthoc$version, paste(unlist(st$posthoc$families), collapse = ", "), st$posthoc$n_comparisons, st$posthoc$adjust, st$posthoc$n_significant))
+        w <- c(st$checks$warnings, st$note)
+        if (length(w)) cat(sprintf("      ANOVA checks: %s\n", paste(w, collapse = "; ")))
+      } else cat(sprintf("      ANOVA not run: %s\n", st$note))
+    }
     gr <- a$goal_recovery
     if (!is.null(gr)) cat(sprintf("      goal truth (%s, terms %s%s): %s\n", gr$goal, paste(unlist(gr$model_terms), collapse = ", "),
       if (isFALSE(gr$terms_match)) ", NOT the terms Bioana tested" else "",

@@ -102,6 +102,14 @@
                                                          df = goal_result$df, p = goal_result$p, method = goal_result$method),
                                               file.path(outdir, "goal_test.tsv")))
   }
+  # classical ANOVA next to the model (stat_tests.tsv): repeated-measures / mixed / factorial, post-hoc, effect sizes
+  st <- NULL
+  if (type == "continuous" && !isFALSE(args$anova)) {
+    st <- tryCatch(.ba_stat_tests(frame, p, design, goal, alpha),
+                   error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
+    if (!is.null(st$anova_table)) paths <- c(paths, anova_table = .ba_write_tsv(st$anova_table, file.path(outdir, "anova_table.tsv")))
+    if (!is.null(st$posthoc)) paths <- c(paths, posthoc = .ba_write_tsv(st$posthoc, file.path(outdir, "posthoc.tsv")))
+  }
   aov <- if (type == "continuous") tryCatch(as.data.frame(stats::anova(fit)), error = function(e) NULL) else NULL
   if (!is.null(aov) && has_random && !"Pr(>F)" %in% names(aov) && "F value" %in% names(aov)) {
     # lme4 without lmerTest gives F only: denominator df = rows - fixed coefficients
@@ -120,6 +128,7 @@
                   goal = c(.ba_goal_summary(goal, plan), if (!is.null(goal_result)) list(result = goal_result),
                            if (!is.null(goal$effect)) list(effect_scale_used = .ba_tsv("engines")$estimate_scale[.ba_tsv("engines")$engine == eng])),
                   secondary_engine = .ba_secondary_engine(ch$chain, eng),
+                  stat_test = st$summary,
                   anova = if (is.null(aov)) NULL else lapply(split(cbind(term = rownames(aov), aov), seq_len(nrow(aov))), as.list),
                   warnings = warn)
   truth <- .ba_entry_truth(entry, design$dir)

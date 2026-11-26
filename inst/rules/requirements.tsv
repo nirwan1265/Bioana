@@ -30,3 +30,7 @@ patchwork	CRAN	plots	multi-panel plots
 devtools	CRAN	dev	load_all, test, document
 testthat	CRAN	dev	tests
 simitall	GitHub:nirwan1265/simitall	suite	Simitall end-to-end tests (optional)
+afex	CRAN	engines	repeated-measures, mixed and factorial ANOVA with sphericity corrections and effect sizes (stat_tests.tsv)
+emmeans	CRAN	engines	post-hoc comparisons and simple effects after the ANOVA (posthoc.json)
+car	CRAN	engines	type III ANOVA tables and Levene tests used with afex
+rstatix	CRAN	dev	reference values in the ANOVA tests (tests/testthat/test-stat-tests.R)
