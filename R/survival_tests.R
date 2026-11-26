@@ -12,9 +12,7 @@
   treat <- fx[vapply(fx, function(v) role(v) == "treatment" && !is.numeric(frame[[v]]), logical(1))]
   rblock <- unlist(lapply(p$random, function(r) if (isTRUE(r$intercept_only) && length(r$vars) == 1L && role(r$vars) == "block") r$vars))
   blocks <- intersect(c(fx[vapply(fx, function(v) role(v) == "block", logical(1))], rblock), names(frame))
-  extra_strata <- intersect(unlist(lapply(unlist(sv$strata), function(s) {
-    v <- names(p$col)[vapply(names(p$col), function(v) identical(v, s) || identical(as.character(p$col[[v]]), s), logical(1))]
-    if (length(v)) v else s })), names(frame))        # a model term or a metadata column
+  extra_strata <- .ba_survival_strata(sv$strata, p, frame)
   strata_v <- unique(c(if (isTRUE(sr$stratify_by_blocks)) blocks, extra_strata))
   d <- frame[!is.na(frame$y_) & !is.na(frame$event_), , drop = FALSE]
   if (any(!d$event_ %in% c(0, 1))) return(.ba_competing_tests(d, treat, strata_v, p, design, alpha, sv, sr))
@@ -320,4 +318,13 @@
   } else if (!is.finite(t0)) notes <- c(notes, "no change_time in the truth: no piecewise estimate")
   out$note <- paste(c(out$note, notes), collapse = "; ")
   out
+}
+
+# analysis.survival.strata -> frame columns (a model term or a metadata column). Biodes 01d41ef: blocks named here
+# are not also "+ block" in the model, so the Cox model stratifies on them (method_outcome.R surv_rhs) as the
+# log-rank does.
+.ba_survival_strata <- function(strata, p, frame) {
+  intersect(unlist(lapply(unlist(strata), function(s) {
+    v <- names(p$col)[vapply(names(p$col), function(v) identical(v, s) || identical(as.character(p$col[[v]]), s), logical(1))]
+    if (length(v)) v else s })), names(frame))
 }

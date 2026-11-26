@@ -74,6 +74,9 @@
   if (type == "survival") {
     # fixed block terms in a Cox model (survival_rules.json): many blocks -> shared frailty, few -> strata (surv_rhs)
     sr_ <- .ba_rules("survival_rules")
+    p$surv_strata <- .ba_survival_strata(c(design$spec$analysis$survival$strata, args$survival$strata), p, frame)
+    in_model_ <- unique(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l)))))
+    if (length(s_ <- setdiff(p$surv_strata, in_model_))) warn <- c(warn, sprintf("Cox model stratified on %s (analysis.survival.strata)", paste(s_, collapse = ", ")))
     for (l in p$fixed_labels) {
       v <- all.vars(str2lang(l))
       if (length(v) != 1L || !identical(p$role[[v]], "block")) next
@@ -348,7 +351,10 @@
       blk <- vapply(lab, function(l) { v <- all.vars(str2lang(l)); length(v) == 1L && identical(p$role[[v]], "block") }, logical(1))
       lab[blk] <- sprintf("strata(%s)", lab[blk])
     }
-    rhs <- c(lab, extra); if (!length(rhs)) rhs <- "1"
+    # analysis.survival.strata not already in the model: stratify the Cox baseline on them (Biodes 01d41ef)
+    in_model <- unique(unlist(lapply(lab, function(l) all.vars(str2lang(l)))))
+    sv_strata <- setdiff(p$surv_strata, in_model)
+    rhs <- c(lab, if (length(sv_strata)) sprintf("strata(%s)", sv_strata), extra); if (!length(rhs)) rhs <- "1"
     stats::as.formula(paste("survival::Surv(y_, event_) ~", paste(rhs, collapse = " + ")),
                       env = list2env(list(strata = survival::strata, cluster = survival::cluster), parent = parent.frame()))   # cox.zph re-evaluates frame there
   }

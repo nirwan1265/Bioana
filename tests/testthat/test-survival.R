@@ -19,10 +19,13 @@ test_that("lung: KM medians, log-rank, Cox HR, landmarks = survival and the tuto
   x <- lung_df()
   lr <- survival::survdiff(survival::Surv(time, status) ~ sex, data = x)
   expect_equal(trow(st, "^log-rank")[[1]]$statistic, lr$chisq); expect_equal(round(lr$chisq, 1), 10.3)
+  st0 <- surv_run(bioana_example("lung"))                                                            # no strata: the tutorial's Cox
   cx <- survival::coxph(survival::Surv(time, status) ~ sex, data = x)
-  expect_equal(trow(st, "Cox")[[1]]$estimate, unname(exp(stats::coef(cx))), tolerance = 1e-8)
-  expect_equal(round(trow(st, "Cox")[[1]]$estimate, 2), 0.59)                                        # tutorial: HR 0.59
-  z <- survival::cox.zph(cx); expect_equal(st$ph_check[[1]]$p, unname(z$table[1, "p"]), tolerance = 1e-8)
+  expect_equal(trow(st0, "Cox")[[1]]$estimate, unname(exp(stats::coef(cx))), tolerance = 1e-8)
+  expect_equal(round(trow(st0, "Cox")[[1]]$estimate, 2), 0.59)                                       # tutorial: HR 0.59
+  z <- survival::cox.zph(cx); expect_equal(st0$ph_check[[1]]$p, unname(z$table[1, "p"]), tolerance = 1e-8)
+  cs <- survival::coxph(survival::Surv(time, status) ~ sex + strata(ph.ecog), data = x)               # strata asked: Cox stratified too
+  expect_equal(trow(st, "Cox")[[1]]$estimate, unname(exp(stats::coef(cs))), tolerance = 1e-8)
   ls <- survival::survdiff(survival::Surv(time, status) ~ sex + strata(ph.ecog), data = x)
   expect_equal(trow(st, "stratified")[[1]]$statistic, ls$chisq); expect_equal(round(ls$chisq, 1), 10.8)  # tutorial: 10.8
   expect_equal(round(trow(st, "weighted")[[1]]$statistic, 2), 3.45)                                       # tutorial: FH(0,1) 3.45
@@ -265,4 +268,30 @@ test_that("a Cox fit that does not converge (separation) is flagged and its goal
   utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); a <- r$summary$analyses$outcome
   expect_match(paste(a$warnings, collapse = " "), "did not converge")
   expect_false(a$goal_recovery$scored)
+})
+
+test_that("factorial_crd survival with blocks only in analysis.survival.strata: Cox and log-rank stratified, no block coefficient (Biodes 01d41ef)", {
+  d <- file.path(tempfile("fcrd_"), "design"); dir.create(d, recursive = TRUE); set.seed(5)
+  g <- expand.grid(rep = 1:2, line = c("B73", "Mo17"), n = c("low", "high"), block = sprintf("R%02d", 1:12), stringsAsFactors = FALSE)
+  g$unit <- sprintf("P%03d", seq_len(nrow(g))); g$sample_id <- g$unit
+  be <- stats::rnorm(12, 0, 0.4)[match(g$block, sprintf("R%02d", 1:12))]
+  t <- -log(stats::runif(nrow(g))) / (0.03 * exp(be) * ifelse(g$line == "Mo17", 0.7, 1) * ifelse(g$n == "high", 1.3, 1))
+  g$time <- pmin(round(t, 1), 90); g$event <- as.integer(t <= 90)
+  spec <- list(handoff_version = "0.6.6", origin = "planned", organism = "Zea mays", system = "field",
+               factors = list(list(name = "line", n_levels = 2L, levels = list("B73", "Mo17")), list(name = "n", n_levels = 2L, levels = list("low", "high"))),
+               design = list(chosen = "factorial_crd"), primary_outcome = list(name = "days to flowering", type = "survival", event_column = "event"),
+               analysis = list(model = "y ~ treatment * treatment2", terms = list(treatment = "line", treatment2 = "n", layout_columns = list("line", "n", "block")),
+                               survival = list(strata = list("block"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(g[c("unit", "line", "n", "block")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(g, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "time", event_column = "event"))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); a <- r$summary$analyses$outcome
+  expect_match(a$model_fitted, "strata\\(block\\)")
+  expect_match(paste(a$warnings, collapse = " "), "stratified on block")
+  expect_false(any(grepl("^block", r$results$outcome$term)))
+  m <- g; m$line <- factor(m$line, c("B73", "Mo17")); m$n <- factor(m$n, c("low", "high"))
+  ref <- survival::coxph(survival::Surv(time, event) ~ line * n + strata(block), data = m)
+  expect_equal(unname(r$results$outcome$estimate), unname(stats::coef(ref)), tolerance = 1e-8)
+  expect_true(any(grepl("stratified log-rank chi-squared \\(strata: block\\)", vapply(a$stat_test$table, `[[`, "", "statistic_name"))))
 })

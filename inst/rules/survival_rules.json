@@ -10,6 +10,7 @@
   "rmst_tau": "min_max_followup",
   "_note_rmst_tau": "default horizon: the smallest of the groups' largest follow-up times, so tau is inside every group's support (Tian et al. 2020). analysis.survival.rmst_tau overrides; the report says which.",
   "stratify_by_blocks": true,
+  "_note_strata": "analysis.survival.strata columns stratify the log-rank and the Cox baseline (strata(v)); no coefficient is fitted for them (Biodes 01d41ef).",
   "_note_stratify_by_blocks": "a design with blocks (RCBD reps, randomization strata) gets a stratified log-rank (strata(block)) as the primary test, the analysis matching the randomization; the unstratified test is reported next to it.",
   "logrank_weight": "logrank",
   "_note_logrank_weight": "names (survMisc::comp rows): logrank (FH 0,0), gehan (Gehan-Breslow), tarone_ware, peto (Peto-Peto, = survdiff rho 1), fh_1_0 (early), fh_0_1 (late), fh_1_1 (middle). Only the prespecified weight is the primary test; scanning weights for the smallest p is not done.",

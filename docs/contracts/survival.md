@@ -47,6 +47,10 @@ Bioana 0.10.0 runs a full survival analysis for `primary_outcome.type = "surviva
 - RCBD blocks as fixed terms in Cox models: Bioana fits >= 10 blocks as a shared frailty, fewer as strata.
   Biodes may keep writing `y ~ treatment + block`.
 
+- Biodes 01d41ef: survival specs without blocks use `crd` / `factorial_crd`; blocks listed in
+  `analysis.survival.strata` are not in the model. Bioana stratifies both the log-rank and the Cox model on them
+  (Bioana 0.11.3).
+
 ## Simitall
 
 1. Survival is now log-normal AFT only (hazards not proportional). Bioana scores that goal truth
