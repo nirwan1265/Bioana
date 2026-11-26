@@ -57,6 +57,9 @@ Covariates (with `log(plant age)` written as `transform: "log"`), `regression`, 
 `regression`, `predict_at` (measured values; transformed by Bioana), `robust`, power `source: "stated"` and
 `assumptions["power.method"]` all read. Trimmed means in an RCBD use `rmanova_trimmed` (blocks as the unit).
 
+- Biodes 412c0e6: `analysis.adjust_for` / `factors[].role: "adjustment"` (e.g. sex): additive term, tested in
+  the ANOVA table, not compared post hoc, not in `goal_terms`.
+
 ## Simitall
 
 1. Simulate covariates per unit: normal by default (`mean`, `sd` from `analysis.covariates` if given), with a

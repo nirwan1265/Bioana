@@ -169,3 +169,23 @@ test_that("rank tests: vs_control keeps the control comparisons and adjusts agai
   b <- mk(list(type = "none"))
   expect_null(b$st$posthoc); expect_match(b$st$note, "no post-hoc")
 })
+
+test_that("adjustment factors (Biodes analysis.adjust_for / factors[].role adjustment) stay in the ANOVA but get no post-hoc", {
+  set.seed(21); g <- expand.grid(rep = 1:6, treatment = c("d1", "d2"), treatment2 = c("female", "male"), stringsAsFactors = FALSE)
+  g$plot <- seq_len(nrow(g)); g$sample_id <- paste0("S", g$plot)
+  g$primary_outcome <- 250 + 15 * (g$treatment == "d2") + 20 * (g$treatment2 == "male") + stats::rnorm(nrow(g), 0, 8)
+  d <- file.path(tempfile("adj_"), "design"); dir.create(d, recursive = TRUE)
+  spec <- list(handoff_version = "0.6.8", origin = "planned", organism = "rat", system = "lab",
+               factors = list(list(name = "diet", n_levels = 2L, levels = list("d1", "d2")), list(name = "sex", n_levels = 2L, levels = list("female", "male"), role = "adjustment")),
+               design = list(chosen = "factorial_crd"), primary_outcome = list(name = "weight", type = "continuous"),
+               analysis = list(model = "y ~ treatment + treatment2", terms = list(treatment = "treatment", treatment2 = "treatment2", layout_columns = list("treatment", "treatment2")),
+                               adjust_for = list("sex"), goals = list("treatment_effect"), goal_terms = list(treatment_effect = list("treatment"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE)
+  utils::write.csv(g[c("plot", "treatment", "treatment2")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(g, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome"))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); st <- r$summary$analyses$outcome$stat_test
+  expect_true(all(c("treatment", "treatment2") %in% vapply(st$table, `[[`, "", "term")))
+  expect_equal(unlist(st$posthoc$families), "treatment")
+  expect_match(st$posthoc$note, "adjustment factor")
+})

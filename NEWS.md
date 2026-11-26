@@ -1,3 +1,9 @@
+# bioana 0.13.4
+
+- Biodes 412c0e6 adjustment factors (`analysis.adjust_for`, `factors[].role: "adjustment"`): kept in the model
+  (ANOVA term, regression coefficient) but no post-hoc comparisons; the post-hoc note says so. The goal tests
+  `goal_terms` only (already).
+
 # bioana 0.13.3
 
 - Simitall 22031bb: pairs with a count trait are scored against `secondary_traits.expected_observed_correlation`

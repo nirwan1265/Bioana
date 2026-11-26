@@ -64,6 +64,7 @@
 
 .ba_stat_tests <- function(frame, p, design, goal, alpha = 0.05, type = "continuous", args = list()) {
   lay <- .ba_anova_layout(frame, p)
+  lay$adjust <- .ba_adjust_vars(p, design$spec)   # Biodes 412c0e6: adjustment factors stay in the model, are not compared
   sr <- .ba_rules("stat_rules")
   desc <- .ba_descriptives(frame, p, type, sr)
   gof <- if (type %in% c("nominal", "binary") && length(design$spec$analysis$expected_ratio)) .ba_goodness_of_fit(frame, p, design$spec$analysis$expected_ratio, sr, type) else NULL
@@ -193,8 +194,10 @@
   if (identical(type, "none")) return(list(summary = list(status = "not run", note = "analysis.posthoc.type = none")))
   facs <- c(lay$between, lay$within)
   treat <- facs[vapply(facs, function(v) identical(p$role[[v]] %||% "treatment", "treatment"), logical(1))]
+  adj <- intersect(treat, lay$adjust); treat <- setdiff(treat, adj); pnote <- character()
+  if (length(adj)) pnote <- sprintf("%s: adjustment factor (analysis.adjust_for), in the model but not compared", paste(adj, collapse = ", "))
   gid <- goal$id %||% "treatment_effect"
-  fam <- list(); pnote <- character()
+  fam <- list()
   if (identical(gid, "trend")) return(list(summary = list(status = "not run", note = "goal trend: the slope is the test")))
   fv <- .ba_posthoc_factor(req, p, treat)
   if (is.character(fv) && nzchar(fv) && !fv %in% treat) { pnote <- c(pnote, fv); fv <- NULL }
@@ -614,4 +617,18 @@
   r <- tb[[i]]
   s[c("headline_term", "statistic_name", "statistic", "df1", "df2", "p")] <- list(r$term, r$statistic_name, r$statistic, r$df1, r$df2, r$p)
   s
+}
+
+# Model variables that are adjustment factors: Biodes analysis.adjust_for (factor names or columns) or
+# factors[].role "adjustment" (412c0e6).
+.ba_adjust_vars <- function(p, spec) {
+  nm <- c(unlist(spec$analysis$adjust_for), unlist(lapply(spec$factors %||% list(), function(f) if (identical(f$role, "adjustment")) f$name)))
+  if (!length(nm)) return(character())
+  fn <- vapply(spec$factors %||% list(), function(f) as.character(f$name %||% ""), "")
+  tr <- .ba_rules("model_terms")$terms
+  p$vars[vapply(p$vars, function(v) {
+    k <- match(as.character(p$col[[v]] %||% ""), fn)          # the term's spec factor, as read_design.R maps it
+    if (is.na(k) && !is.null(tr[[v]]$from_spec_factor) && length(fn) >= tr[[v]]$from_spec_factor) k <- tr[[v]]$from_spec_factor
+    v %in% nm || as.character(p$col[[v]] %||% "") %in% nm || (!is.na(k) && fn[k] %in% nm)
+  }, logical(1))]
 }
