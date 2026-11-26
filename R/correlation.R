@@ -93,7 +93,7 @@
     tr <- tryCatch(jsonlite::read_json(file.path(design$dir, entry$truth$file)), error = function(e) NULL)
     tt <- tr[[entry$truth$field %||% "secondary_traits"]]
     if (!is.null(tt$within_design_correlation)) {
-      rec <- .ba_correlation_recovery(tab, tt, alpha)
+      rec <- .ba_correlation_recovery(tab, tt, alpha, ty)
       if (!is.null(rec)) { paths <- c(paths, correlation_recovery = .ba_write_tsv(rec$table, file.path(outdir, "correlation_recovery.tsv"))); summary$recovery <- rec$summary }
     }
   }
@@ -126,16 +126,30 @@
 
 # Within-design correlations vs Simitall's planted residual correlation (secondary_traits.within_design_correlation,
 # keyed by column): each pair's estimate, its interval (cor.test), covered.
-.ba_correlation_recovery <- function(tab, tt, alpha = 0.05) {
-  R <- tt$within_design_correlation
+.ba_correlation_recovery <- function(tab, tt, alpha = 0.05, types = NULL) {
+  # truth: within_design_correlation (latent residual correlation); for pairs with a count trait Simitall's
+  # expected_observed_correlation (thinned by the Poisson noise, 22031bb). Both are Pearson-scale; a Spearman or
+  # Kendall pair is compared on its own scale under bivariate normality: rho_s = 6/pi asin(r/2), tau = 2/pi asin(r).
+  R <- tt$within_design_correlation; Ro <- tt$expected_observed_correlation
   w <- tab[tab$scope == "within design", , drop = FALSE]
+  if (!nrow(w)) w <- tab[tab$scope == unique(tab$scope)[1], , drop = FALSE]   # no design terms (y ~ 1): raw = within design
   if (!nrow(w)) return(NULL)
-  tv <- mapply(function(a, b) { x <- R[[a]][[b]] %||% R[[b]][[a]]; if (is.null(x)) NA_real_ else as.numeric(x) }, w$var1, w$var2)
-  out <- data.frame(var1 = w$var1, var2 = w$var2, true_r = tv, estimate = w$r, ci_low = w$ci_low, ci_high = w$ci_high, stringsAsFactors = FALSE)
+  get <- function(M, a, b) { x <- M[[a]][[b]] %||% M[[b]][[a]]; if (is.null(x)) NA_real_ else as.numeric(x) }
+  cnt <- function(v) identical(types[[v]] %||% "continuous", "count")
+  src <- ifelse(mapply(function(a, b) !is.null(Ro) && (cnt(a) || cnt(b)) && !is.na(get(Ro, a, b)), w$var1, w$var2), "expected_observed_correlation", "within_design_correlation")
+  tv <- mapply(function(a, b, s) get(if (s == "expected_observed_correlation") Ro else R, a, b), w$var1, w$var2, src)
+  tm <- ifelse(w$method == "spearman", 6 / pi * asin(tv / 2), ifelse(w$method == "kendall", 2 / pi * asin(tv), tv))
+  out <- data.frame(var1 = w$var1, var2 = w$var2, method = w$method, truth_source = src, true_r = tv, true_for_method = tm, estimate = w$r,
+                    ci_low = w$ci_low, ci_high = w$ci_high, stringsAsFactors = FALSE)
   out <- out[!is.na(out$true_r), , drop = FALSE]
   if (!nrow(out)) return(NULL)
-  out$covered <- out$true_r >= out$ci_low & out$true_r <= out$ci_high
+  # Spearman / Kendall pairs have no interval from cor.test: covered by Fisher z on the estimate (n from the table)
+  nn <- w$n[match(paste(out$var1, out$var2), paste(w$var1, w$var2))]
+  miss <- is.na(out$ci_low) & !is.na(nn) & nn > 3
+  if (any(miss)) { q <- stats::qnorm(1 - alpha / 2); se <- ifelse(out$method == "spearman", sqrt(1.06 / (nn - 3)), 1 / sqrt(nn - 3))
+    out$ci_low[miss] <- tanh(atanh(out$estimate[miss]) - q * se[miss]); out$ci_high[miss] <- tanh(atanh(out$estimate[miss]) + q * se[miss]) }
+  out$covered <- out$true_for_method >= out$ci_low & out$true_for_method <= out$ci_high
   list(table = out, summary = list(scope = "within design (residuals on the design)", pairs = nrow(out), covered = sum(out$covered, na.rm = TRUE),
-                                   largest_difference = max(abs(out$estimate - out$true_r)), mean_estimate = mean(out$estimate), mean_true = mean(out$true_r),
-                                   note = tt$note))
+                                   largest_difference = max(abs(out$estimate - out$true_for_method)), mean_estimate = mean(out$estimate), mean_true = mean(out$true_for_method),
+                                   note = paste(c(tt$note, if (any(out$method != "pearson")) "Spearman/Kendall pairs compared with the truth converted from Pearson under normality (Fieller 1957 SE for the interval)"), collapse = "; ")))
 }

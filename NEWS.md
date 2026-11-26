@@ -1,3 +1,11 @@
+# bioana 0.13.3
+
+- Simitall 22031bb: pairs with a count trait are scored against `secondary_traits.expected_observed_correlation`
+  (thinned by the Poisson noise), other pairs against `within_design_correlation`. Spearman / Kendall pairs are
+  compared with the truth converted from Pearson under normality (6/pi asin(r/2), 2/pi asin(r)), with a Fisher-z
+  interval. Barley (40 lines x 3 reps, tillers a count), 8 seeds: tillers-height 0.217 vs 0.203, tillers-grain
+  0.250 vs 0.203, height-grain 0.328 vs 0.300. One-group studies (y ~ 1) are scored on the raw correlations.
+
 # bioana 0.13.2
 
 Biodes 0.6.8 (ff01031) run through Bioana (soil phosphorus regression, log(age) x temperature, ANCOVA, logistic,

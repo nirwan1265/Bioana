@@ -157,3 +157,19 @@ test_that("correlation method per trait type when unstated (Biodes 0e5dcc9): cou
   spec$assumptions <- NULL
   r <- run(cat_dir(m, spec, NULL), only = "correlation"); expect_true(all(r$results$correlation$method == "pearson"))
 })
+
+test_that("count trait pairs scored against Simitall's expected_observed_correlation, on Spearman's scale (6/pi asin(r/2))", {
+  set.seed(8); n <- 200
+  m <- data.frame(plot = 1:n, sample_id = paste0("S", 1:n), stringsAsFactors = FALSE)
+  z <- matrix(stats::rnorm(n * 2), n) %*% chol(matrix(c(1, 0.5, 0.5, 1), 2))
+  m$primary_outcome <- 50 + 5 * z[, 1]; m$tillers <- stats::rpois(n, pmax(0.1, 6 + 2 * z[, 2]))
+  spec <- list(factors = list(), design = list(chosen = "single_group"), primary_outcome = list(name = "height", type = "continuous"),
+               secondary_outcomes = list(list(name = "tillers", column = "tillers", type = "count")),
+               analysis = list(model = "y ~ 1", goals = list(), correlation = list(variables = list("height", "tillers"))))
+  R <- list(primary_outcome = list(primary_outcome = 1, tillers = 0.5), tillers = list(primary_outcome = 0.5, tillers = 1))
+  Ro <- list(primary_outcome = list(primary_outcome = 1, tillers = 0.4), tillers = list(primary_outcome = 0.4, tillers = 1))
+  d <- cat_dir(m, spec, list(secondary_traits = list(within_design_correlation = R, expected_observed_correlation = Ro))); r <- run(d, only = "correlation")
+  rec <- utils::read.delim(list.files(d, "correlation_recovery.tsv", recursive = TRUE, full.names = TRUE)[1])
+  expect_equal(rec$truth_source, "expected_observed_correlation"); expect_equal(rec$method, "spearman")
+  expect_equal(rec$true_for_method, 6 / pi * asin(0.4 / 2))
+})

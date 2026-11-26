@@ -60,7 +60,7 @@ Truth scored (`goal_recovery` / `recovery`):
 | `outcome_model.group_probability` | observed share per treatment cell, Clopper-Pearson CI | `group_probability_recovery.tsv`, `goal_recovery.probabilities` |
 | `outcome_model.conditional_odds_ratios` | model OR (glmer with random block = conditional), Wald CI | `goal_recovery.odds_ratios` |
 | `outcome_model.true_ratio`, `distorted` | goodness-of-fit p (detected = distorted?), class shares with CIs | `ratio_recovery.tsv`, `goal_recovery` (goal `segregation_ratio`) |
-| `secondary_traits.within_design_correlation` | within-design (residual) correlation, cor.test CI | `correlation_recovery.tsv`, `recovery` |
+| `secondary_traits.within_design_correlation`; `expected_observed_correlation` for pairs with a count trait (Simitall 22031bb) | within-design (residual) correlation; Spearman/Kendall pairs vs the truth converted from Pearson | `correlation_recovery.tsv` (`truth_source`, `true_for_method`), `recovery` |
 | `agreement.icc2` / `icc3` | psych ICC2 / ICC3 with CI | `agreement_recovery.tsv` |
 | `agreement.expected_kappa`, `expected_weighted_kappa_quadratic` | Cohen's (2 raters, CI) or Fleiss' and Light's kappa; quadratic weighted kappa (mean of pairs for 3+) | `agreement_recovery.tsv` |
 
