@@ -92,7 +92,9 @@ test_that("correlation: trait names map to template columns (primary_outcome, se
                                correlation = list(variables = list("plant_height", "tiller_number", "grain_weight"), method = "pearson")))
   R <- list(primary_outcome = list(primary_outcome = 1, tiller_number = 0.5, grain_weight = 0.5), tiller_number = list(primary_outcome = 0.5, tiller_number = 1, grain_weight = 0.5),
             grain_weight = list(primary_outcome = 0.5, tiller_number = 0.5, grain_weight = 1))
+  spec$assumptions <- list(analysis.correlation.method = "not stated: pearson")
   r <- run(cat_dir(m, spec, list(secondary_traits = list(within_design_correlation = R))), only = "correlation"); a <- r$summary$analyses$correlation
+  expect_equal(a$method_assumed, "not stated: pearson")
   expect_equal(unlist(a$variables), c("primary_outcome", "tiller_number", "grain_weight"))
   res <- sapply(c("primary_outcome", "tiller_number"), function(v) stats::resid(stats::lm(m[[v]] ~ m$treatment)))
   expect_equal(r$results$correlation$r[r$results$correlation$scope == "within design"][1], stats::cor(res)[1, 2])

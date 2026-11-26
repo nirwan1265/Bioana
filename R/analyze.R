@@ -141,7 +141,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     } else if (a$data_type == "genotypes") {
       sprintf("%d lines x %d markers tested, %d significant", a$n_lines, a$n_features_tested, a$significant$markers)
     } else if (a$data_type == "traits") {
-      sprintf("%s correlation of %d traits: %d/%d pairs with adjusted p < 0.05%s", a$method, length(a$variables), a$n_significant, a$n_pairs,
+      sprintf("%s correlation of %d traits: %d/%d pairs with adjusted p < 0.05%s", paste0(a$method, if (!is.null(a$method_assumed)) " (assumed by Biodes)" else ""), length(a$variables), a$n_significant, a$n_pairs,
               if (!is.null(a$strongest)) sprintf("; strongest %s-%s r = %.2f", a$strongest$var1, a$strongest$var2, a$strongest$r) else "")
     } else if (a$data_type == "ratings") {
       pm <- a$primary

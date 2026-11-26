@@ -1,3 +1,7 @@
+# bioana 0.12.1
+
+- Correlation method marked "assumed by Biodes" when `assumptions["analysis.correlation.method"]` is set.
+
 # bioana 0.12.0
 
 Biodes 0.6.7 (89e9b49) and Simitall 480f38d (docs/contracts/categorical_correlation_agreement.md):

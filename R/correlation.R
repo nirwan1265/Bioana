@@ -15,6 +15,8 @@
   if (length(vars) < 2) stop("Correlation needs at least two variables (analysis.correlation.variables).", call. = FALSE)
   if (length(miss)) stop(sprintf("Correlation variables not in the table: %s.", paste(miss, collapse = ", ")), call. = FALSE)
   method <- match.arg(cs$method %||% rules$method %||% "pearson", c("pearson", "spearman", "kendall"))
+  # Biodes 0.6.7: an unstated method is pearson, with assumptions["analysis.correlation.method"] saying so
+  method_assumed <- design$spec$assumptions[["analysis.correlation.method"]]
   adj <- cs$adjust %||% rules$adjust %||% "holm"
   X <- as.data.frame(lapply(dat[vars], function(z) suppressWarnings(as.numeric(z))))
   notes <- character()
@@ -64,7 +66,7 @@
              correlation_matrix = .ba_write_tsv(mat("raw"), file.path(outdir, "correlation_matrix.tsv")))
   if (any(tab$scope == "within design")) paths <- c(paths, correlation_matrix_within = .ba_write_tsv(mat("within design"), file.path(outdir, "correlation_matrix_within.tsv")))
   raw <- tab[tab$scope == "raw", ]
-  summary <- list(data_type = "traits", method = method, package = "stats", version = as.character(utils::packageVersion("stats")),
+  summary <- list(data_type = "traits", method = method, method_assumed = method_assumed, package = "stats", version = as.character(utils::packageVersion("stats")),
                   call = sprintf("stats::cor.test(x, y, method = '%s') per pair; p.adjust('%s')", method, adj), variables = as.list(unname(vars)), trait_names = as.list(stats::setNames(names(vars) %||% vars, vars)),
                   n_pairs = nrow(raw), n_significant = sum(raw$p_adj < alpha), within_design = res_note,
                   strongest = if (nrow(raw)) { i <- which.max(abs(raw$r)); list(var1 = raw$var1[i], var2 = raw$var2[i], r = raw$r[i], p_adj = raw$p_adj[i]) },
