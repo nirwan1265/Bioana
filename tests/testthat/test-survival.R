@@ -295,3 +295,13 @@ test_that("factorial_crd survival with blocks only in analysis.survival.strata: 
   expect_equal(unname(r$results$outcome$estimate), unname(stats::coef(ref)), tolerance = 1e-8)
   expect_true(any(grepl("stratified log-rank chi-squared \\(strata: block\\)", vapply(a$stat_test$table, `[[`, "", "statistic_name"))))
 })
+
+test_that("the fitted Cox formula is reported as one line, also for coxme (not 'surv_rhs(bars)')", {
+  expect_equal(bioana:::.ba_formula_text(stats::as.formula("survival::Surv(y_, event_) ~ treatment + treatment2 + treatment:treatment2 + strata(block) + strata(other_long_name)")),
+               "survival::Surv(y_, event_) ~ treatment + treatment2 + treatment:treatment2 + strata(block) + strata(other_long_name)")
+  skip_if_not_installed("coxme")
+  f <- block_surv_folder(30, 1)
+  utils::capture.output(r <- bioana_analyze(f$dir, secondary = FALSE)); a <- r$summary$analyses$outcome
+  expect_equal(a$engine$engine, "coxme")
+  expect_match(a$model_fitted, "Surv\\(y_, event_\\) ~ treatment \\+ \\(1 \\| block\\)")
+})

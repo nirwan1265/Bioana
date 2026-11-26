@@ -168,7 +168,7 @@
   }
   summary <- list(data_type = "outcome", outcome_type = type, response = spec$primary_outcome$name %||% col,
                   method = paste(class(fit)[1], if (type == "survival") "(Cox proportional hazards)" else ""),
-                  model_fitted = if (type == "survival") paste(deparse(stats::formula(fit)), collapse = "") else paste(deparse(stats::formula(fit)), collapse = ""),
+                  model_fitted = .ba_formula_text(attr(fit, "ba_formula") %||% stats::formula(fit)),
                   n_rows = nrow(meta), n_units_fitted = nrow(frame), subsamples = if (has_subs) subsamples else "none",
                   dropped_samples = meta$sample_id[is.na(y)],
                   engine = .ba_provenance(eng, d2, tryCatch(paste(deparse(stats::getCall(fit)), collapse = " "), error = function(e) class(fit)[1]),
@@ -378,7 +378,11 @@
       frame$frailty_g_ <- interaction(frame[g], drop = TRUE)
       survival::coxph(surv_rhs("survival::frailty(frailty_g_)"), data = frame)
     },
-    coxme = coxme::coxme(surv_rhs(bars), data = frame),
+    coxme = {
+      # the formula object goes into the call (do.call), so formula(fit) and printing show it, not "surv_rhs(bars)"
+      ff <- surv_rhs(bars); fit_ <- do.call(coxme::coxme, list(formula = ff, data = quote(frame)))
+      attr(fit_, "ba_formula") <- ff; fit_
+    },
     glmmtmb = {
       if (!type %in% c("continuous", "binary", "count")) stop(sprintf("glmmTMB is set up for continuous, binary and count outcomes, not %s.", type), call. = FALSE)
       glmmTMB::glmmTMB(f, data = frame, family = switch(type, continuous = stats::gaussian(), binary = stats::binomial(), count = glmmTMB::nbinom2()))
@@ -403,3 +407,6 @@
   if (!is.null(bad)) stop("Outcome check failed: ", bad, call. = FALSE)
   invisible(TRUE)
 }
+
+# One-line formula text for the report (no deparse line breaks).
+.ba_formula_text <- function(f) gsub("\\s+", " ", paste(deparse(f, width.cutoff = 500L), collapse = " "))

@@ -3,6 +3,8 @@
 - `analysis.survival.strata` now stratifies the Cox model too (`+ strata(v)`), not only the log-rank. Biodes 01d41ef
   puts blocks there instead of `+ block` for survival (`crd` / `factorial_crd`); no block coefficient is fitted. A
   stratum that is already a model term is left to the block rule (frailty or strata).
+- `model_fitted` with the coxme engine showed `surv_rhs(bars)`; the formula is now passed into the coxme call and
+  reported. Fitted formulas print on one line.
 - Biodes' `factorial_crd` (`y ~ treatment * treatment2`) is read like any catalog design (test added for survival).
 
 # bioana 0.11.2
