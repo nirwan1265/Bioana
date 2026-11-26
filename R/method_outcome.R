@@ -17,7 +17,7 @@
   goal <- design$goal
   p <- design$parsed
   warn <- character()
-  y <- suppressWarnings(as.numeric(meta[[col]]))
+  y <- if (type == "nominal") { z <- trimws(as.character(meta[[col]])); z[z == ""] <- NA; z } else suppressWarnings(as.numeric(meta[[col]]))
   if (!any(!is.na(y))) stop(sprintf("Column '%s' of the sample metadata is empty: nothing to fit.", col), call. = FALSE)
   meta$y_ <- y
   if (type == "survival") {
@@ -46,6 +46,10 @@
     if (subsamples != "nest") warn <- c(warn, sprintf("survival subsamples are not averaged: %d units kept as clusters of their subsamples (shared frailty)", length(unique(unit))))
     subsamples <- "nest"
   }
+  if (has_subs && type == "nominal") {
+    warn <- c(warn, "subsamples of a nominal outcome are counted one by one (categories cannot be averaged); the unit cluster is ignored")
+    has_subs <- FALSE
+  }
   if (has_subs && type != "survival" && (subsamples == "aggregate" || type != "continuous")) {
     if (type != "continuous" && subsamples == "nest") warn <- c(warn, "subsamples averaged per unit: nesting is fitted for continuous outcomes only")
     first <- dat[!duplicated(dcell), , drop = FALSE]
@@ -62,6 +66,11 @@
   if (type == "survival") { frame$event_ <- dat$event_; frame$event_raw_ <- dat$event_raw_ }
   .ba_check_outcome_values(frame$y_, frame$event_, type, col)
   if (type == "ordinal") frame$y_ <- factor(frame$y_, ordered = TRUE)
+  if (type == "nominal") {
+    cats <- as.character(unlist(spec$primary_outcome$categories))
+    lv <- unique(frame$y_[!is.na(frame$y_)]); lv <- c(intersect(cats, lv), sort(setdiff(lv, cats)))
+    frame$y_ <- factor(frame$y_, levels = lv)
+  }
   has_random <- length(.ba_findbars(f)) > 0
   fixed_f <- .ba_nobars(f)
   # the chain sees the random terms of the formula actually fitted (nested subsamples add one)
@@ -105,7 +114,7 @@
   }
   res <- .ba_coef_table(fit, type, frame, p)
   res$role <- vapply(res$term, function(t) .ba_coef_role(t, p), "")
-  res$padj <- NA_real_
+  res$padj <- rep(NA_real_, nrow(res))
   test <- if (identical(plan$test, "wald")) res$term %in% plan$coefs else res$role == "treatment"
   res$padj[test] <- stats::p.adjust(res$p[test], "BH")
   paths <- c(results = .ba_write_tsv(res, file.path(outdir, "results.tsv")))
@@ -116,11 +125,11 @@
   }
   # classical ANOVA next to the model (stat_tests.tsv): repeated-measures / mixed / factorial, post-hoc, effect sizes
   st <- NULL
-  if (type %in% c("continuous", "ordinal", "binary", "survival") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
+  if (type %in% c("continuous", "ordinal", "binary", "nominal", "survival") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
     st <- tryCatch(if (type == "survival") { fr <- frame; fr$event_ <- fr$event_raw_ %||% fr$event_; .ba_survival_tests(fr, p, design, goal, alpha, args, fit) }
                    else .ba_stat_tests(frame, p, design, goal, alpha, type, args),
                    error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
-    for (k in c("km_curve", "survival_summary", "landmarks", "life_table", "cif_curve")) if (!is.null(st[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(st[[k]], file.path(outdir, paste0(k, ".tsv"))), k))
+    for (k in c("km_curve", "survival_summary", "landmarks", "life_table", "cif_curve", "cells")) if (!is.null(st[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(st[[k]], file.path(outdir, paste0(k, ".tsv"))), k))
     if (!is.null(st$descriptives)) paths <- c(paths, descriptives = .ba_write_tsv(st$descriptives, file.path(outdir, "descriptives.tsv")))
     if (!is.null(st$stat_table)) paths <- c(paths, stat_tests = .ba_write_tsv(st$stat_table, file.path(outdir, "stat_tests.tsv")))
     if (!is.null(st$anova_table)) paths <- c(paths, anova_table = .ba_write_tsv(st$anova_table, file.path(outdir, "anova_table.tsv")))
@@ -193,6 +202,18 @@
     z <- b / se
     return(data.frame(term = names(b), estimate = unname(b), se = unname(se), df = Inf, statistic = unname(z),
                       p = 2 * stats::pnorm(-abs(unname(z))), stringsAsFactors = FALSE, row.names = NULL))
+  }
+  if (inherits(fit, "multinom")) {
+    # one row per category (vs the reference category) and coefficient
+    b <- stats::coef(fit); if (is.null(dim(b))) b <- t(as.matrix(b))
+    se <- sqrt(diag(stats::vcov(fit))); se <- matrix(se, nrow = nrow(b), byrow = TRUE)
+    if (nrow(b) == 1L && is.null(rownames(b))) rownames(b) <- fit$lev[2]
+    out <- do.call(rbind, lapply(seq_len(nrow(b)), function(i) {
+      z <- b[i, ] / se[i, ]
+      data.frame(term = colnames(b), category = rownames(b)[i], estimate = unname(b[i, ]), se = unname(se[i, ]), df = Inf, statistic = unname(z),
+                 p = 2 * stats::pnorm(-abs(unname(z))), stringsAsFactors = FALSE)
+    }))
+    return(out[out$term != "(Intercept)", , drop = FALSE])
   }
   if (inherits(fit, c("clm", "clmm", "polr"))) {
     co <- if (inherits(fit, "polr")) {
@@ -311,6 +332,7 @@
     glmer_nb = lme4::glmer.nb(f, data = frame),
     clm = if (length(bars)) ordinal::clmm(f, data = frame) else ordinal::clm(fixed_f, data = frame),
     polr = MASS::polr(fixed_f, data = frame, Hess = TRUE),
+    multinom = nnet::multinom(fixed_f, data = frame, trace = FALSE, Hess = TRUE),
     coxph = survival::coxph(surv_rhs(), data = frame),
     coxph_frailty = {
       g <- all.vars(.ba_findbars(f)[[1]][[3]])
@@ -332,6 +354,7 @@
     binary = if (!all(v %in% c(0, 1))) sprintf("a binary outcome must be 0/1; '%s' has %s", col, paste(utils::head(setdiff(unique(v), c(0, 1)), 3), collapse = ", ")),
     count = if (any(v < 0 | abs(v - round(v)) > 1e-8)) sprintf("a count outcome must be non-negative whole numbers; '%s' has e.g. %s", col, v[v < 0 | abs(v - round(v)) > 1e-8][1]),
     ordinal = if (length(unique(v)) < 2) sprintf("an ordinal outcome needs at least 2 categories; '%s' has %d", col, length(unique(v))),
+    nominal = if (length(unique(v)) < 2) sprintf("a nominal outcome needs at least 2 categories; '%s' has %d", col, length(unique(v))),
     survival = {
       e <- event[!is.na(event)]
       if (any(v < 0)) sprintf("survival times must be >= 0; '%s' has %s", col, min(v))

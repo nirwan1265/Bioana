@@ -1,3 +1,17 @@
+# bioana 0.11.0
+
+- Categorical tests (stat_tests.tsv): McNemar (exact on few discordant pairs), Cochran's Q + pairwise McNemar,
+  Cochran-Mantel-Haenszel for yes/no in blocks, Cochran-Armitage over a numeric dose; odds ratio and relative risk
+  (epitools) with the two-proportion test; exact CIs for proportions.
+- `nominal` outcome type: multinomial logistic engine (nnet::multinom), chi-squared + Cramer's V + cell residuals
+  (`cells.tsv`), Fisher when sparse; goodness of fit to `analysis.expected_ratio` (segregation ratios), Cohen's w.
+- Correlation between traits (data_type `traits`, `analysis.correlation`): cor.test per pair, Holm, raw and within
+  the design (residuals of the design's fixed part).
+- Agreement between raters (data_type `ratings`, `analysis.agreement`): Cohen's and weighted kappa (vcd), Fleiss
+  (irr) or Light's kappa, ICC (psych, six forms; ICC2 primary).
+- Tests reproduce the tutorials' numbers (McNemar 7.26, tulips 3:2:1 chi2 0.20, mtcars mpg-wt r -0.87 t -9.559).
+- Contract: `docs/contracts/categorical_correlation_agreement.md`.
+
 # bioana 0.10.1
 
 - Survival goal truth on one scale: hazard-ratio truth (Simitall weibull_ph, `true_log_hazard_ratio`) vs the Cox

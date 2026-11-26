@@ -55,3 +55,5 @@ outcome:survival	treatment_effect,survival,interaction,time_course,trend	fixed	1
 outcome:survival	treatment_effect,survival,interaction,time_course,trend	random	1	coxme	full	Cox model with normal random effects (coxme)
 outcome:survival	treatment_effect,survival,interaction,time_course,trend	random	2	coxph_frailty	approx	one random term as a gamma frailty, survival::coxph(... + frailty(g))
 outcome:survival	treatment_effect,survival,interaction,time_course,trend	random	9	coxph	drops_random	Cox model without the random terms: only with allow_fallback
+outcome:nominal	treatment_effect,interaction,time_course	fixed	1	multinom	full	nnet::multinom
+outcome:nominal	treatment_effect,interaction,time_course	random	9	multinom	drops_random	nnet::multinom has no random terms: only with allow_fallback = TRUE

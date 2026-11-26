@@ -44,6 +44,10 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
                            secondary = NA, allow_fallback = FALSE) {
   design <- .ba_read_biodes(dir)
   man <- bioana_manifest(dir)
+  # analyses the spec asks for on the sample metadata: correlation between traits, agreement between raters
+  have <- vapply(man$data, function(e) e$data_type %||% "", "")
+  if (!is.null(design$spec$analysis$correlation) && !"traits" %in% have) man$data <- c(man$data, list(list(id = "correlation", data_type = "traits")))
+  if (!is.null(design$spec$analysis$agreement) && !"ratings" %in% have) man$data <- c(man$data, list(list(id = "agreement", data_type = "ratings")))
   if (!length(man$data)) {
     stop(sprintf("Nothing to analyse in %s: no data_manifest.json, an empty primary_outcome column and no counts.tsv. Fill the folder with data (simitall::simitall_from_biodes() or your measurements) and list it with bioana_write_manifest().", dir), call. = FALSE)
   }
@@ -124,6 +128,13 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
       sprintf("%s outcome, %s", a$outcome_type, a$method)
     } else if (a$data_type == "genotypes") {
       sprintf("%d lines x %d markers tested, %d significant", a$n_lines, a$n_features_tested, a$significant$markers)
+    } else if (a$data_type == "traits") {
+      sprintf("%s correlation of %d traits: %d/%d pairs with adjusted p < 0.05%s", a$method, length(a$variables), a$n_significant, a$n_pairs,
+              if (!is.null(a$strongest)) sprintf("; strongest %s-%s r = %.2f", a$strongest$var1, a$strongest$var2, a$strongest$r) else "")
+    } else if (a$data_type == "ratings") {
+      pm <- a$primary
+      sprintf("agreement of %d raters on %d units (%s): %s %.3f%s%s", length(a$raters), a$n_units, a$scale, pm$measure, pm$estimate,
+              if (!is.na(pm$ci_low)) sprintf(" [%.3f, %.3f]", pm$ci_low, pm$ci_high) else "", if (!is.na(pm$interpretation)) paste0(", ", pm$interpretation) else "")
     } else {
       sig <- unlist(a$significant)
       sprintf("%d features tested, %s significant", a$n_features_tested %||% 0L,
@@ -152,6 +163,8 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     if (!is.null(a$recovery_note)) cat(sprintf("      truth: %s\n", a$recovery_note))
     st <- a$stat_test
     if (!is.null(st)) for (x in c(list(st), st$also)) .ba_print_stat_test(x)
+    if (a$data_type %in% c("traits", "ratings") && length(a$warnings)) cat(sprintf("      checks: %s\n", paste(a$warnings, collapse = "; ")))
+    if (!is.null(a$within_design)) cat(sprintf("      %s\n", a$within_design))
 
     gr <- a$goal_recovery
     if (!is.null(gr)) cat(sprintf("      goal truth (%s, terms %s%s): %s\n", gr$goal, paste(unlist(gr$model_terms), collapse = ", "),
@@ -200,6 +213,10 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     cat(sprintf("      %s [%s %s] %s: %s%s = %.3g, p = %.3g%s%s\n", st$test, st$package, st$version, st$factor, r$statistic_name, df, r$statistic, r$p,
                 if (!is.na(r$estimate)) sprintf(", %s %.3g [%.3g, %.3g]", if (is.na(r$contrast)) "estimate" else r$contrast, r$estimate, r$ci_low, r$ci_high) else "",
                 if (!is.na(r$effect)) sprintf(", %s %.2f%s", r$effect_name, r$effect, if (!is.null(st$magnitude)) paste0(" (", st$magnitude, ")") else "") else ""))
+    for (r in st$table[-1]) {
+      if (grepl("odds ratio|relative risk", r$statistic_name)) cat(sprintf("        %s %s %.3g [%.3g, %.3g]\n", r$statistic_name, r$contrast, r$estimate, r$ci_low, r$ci_high))
+      else if (grepl("goodness-of-fit|multinomial", r$statistic_name)) cat(sprintf("        %s (%s): chi-squared(%g) = %.3g, p = %.3g, Cohen's w %.2f\n", r$statistic_name, r$contrast, r$df1, r$statistic, r$p, r$effect))
+    }
   }
   ph <- st$posthoc
   if (identical(ph$status, "run")) cat(sprintf("      post-hoc%s %s%s: %d comparisons (%s), %d with adjusted p < 0.05\n",

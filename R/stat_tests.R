@@ -16,6 +16,9 @@
   }
   fixed <- intersect(unique(c(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l)))), rblock)), names(frame))
   num <- fixed[vapply(fixed, function(v) is.numeric(frame[[v]]), logical(1))]
+  if (length(num) == 1L && length(fixed) == 1L && !length(p$random) && identical(p$role[[num]] %||% "treatment", "treatment"))
+    return(list(layout = "trend", subject = NULL, within = character(), between = num, treat = num, blocks = character(), random_blocks = character(), blocking = "none",
+                reason = sprintf("numeric term %s (trend): the slope is the test", num)))
   if (length(num)) return(list(layout = "none", reason = sprintf("numeric term %s (trend): the slope is the test", paste(num, collapse = ", "))))
   if (length(other)) return(list(layout = "none", reason = sprintf("random terms other than one subject or block (%s): see the mixed model's ANOVA table", paste(other, collapse = ", "))))
   if (length(subj) > 1L) return(list(layout = "none", reason = "more than one subject term"))
@@ -63,7 +66,11 @@
   lay <- .ba_anova_layout(frame, p)
   sr <- .ba_rules("stat_rules")
   desc <- .ba_descriptives(frame, p, type, sr)
-  if (identical(lay$layout, "none")) return(list(summary = list(status = "not run", note = lay$reason), descriptives = desc))
+  gof <- if (type %in% c("nominal", "binary") && length(design$spec$analysis$expected_ratio)) .ba_goodness_of_fit(frame, p, design$spec$analysis$expected_ratio, sr, type) else NULL
+  if (identical(lay$layout, "none")) {
+    if (!is.null(gof)) return(list(summary = gof$summary, stat_table = gof$flat, descriptives = desc))
+    return(list(summary = list(status = "not run", note = lay$reason), descriptives = desc))
+  }
   rules <- .ba_tsv("stat_tests")
   fits <- rules[vapply(seq_len(nrow(rules)), function(i) .ba_stat_matches(rules[i, ], lay, type, frame), logical(1)), , drop = FALSE]
   fam <- sr$default_family[[type]] %||% "parametric"
@@ -77,7 +84,10 @@
     else notes <- c(notes, sprintf("requested test '%s' %s", r, if (r %in% rules$test) "does not fit this outcome and design" else "is not in stat_tests.tsv"))
   }
   ids <- unique(ids)
-  if (!length(ids)) return(list(summary = list(status = "not run", note = paste(c("no test in stat_tests.tsv fits this outcome and design", notes), collapse = "; ")), descriptives = desc))
+  if (!length(ids)) {
+    if (!is.null(gof)) return(list(summary = gof$summary, stat_table = gof$flat, descriptives = desc))
+    return(list(summary = list(status = "not run", note = paste(c(if (identical(lay$layout, "trend")) lay$reason else "no test in stat_tests.tsv fits this outcome and design", notes), collapse = "; ")), descriptives = desc))
+  }
   res <- lapply(ids, function(id) {
     row <- rules[rules$test == id, , drop = FALSE]
     miss <- Filter(function(pk) !requireNamespace(pk, quietly = TRUE), strsplit(row$requires, ",", fixed = TRUE)[[1]])
@@ -85,13 +95,14 @@
     tryCatch(if (startsWith(id, "anova_")) .ba_st_anova(row, frame, lay, p, design, goal, sr) else .ba_st_simple(row, frame, lay, p, design, sr, rules),
              error = function(e) list(summary = list(status = "error", test = id, note = conditionMessage(e))))
   })
+  if (!is.null(gof)) res <- c(res, list(gof))
   main <- res[[1]]$summary
   if (length(notes)) main$note <- paste(c(main$note, notes), collapse = "; ")
   if (length(res) > 1L) main$also <- lapply(res[-1], `[[`, "summary")
   bind <- function(k) { x <- Filter(Negate(is.null), lapply(res, function(r) if (!is.null(r[[k]])) cbind(test = r$summary$test, r[[k]]))); if (length(x)) do.call(rbind, x) }
   at <- Filter(Negate(is.null), lapply(res, `[[`, "anova_table"))
   list(summary = main, anova_table = if (length(at)) at[[1]],
-       posthoc = bind("posthoc"), stat_table = bind("flat"), descriptives = desc)
+       posthoc = bind("posthoc"), stat_table = bind("flat"), descriptives = desc, cells = bind("cells"))
 }
 
 .ba_st_anova <- function(row, frame, lay, p, design, goal, ph) {
@@ -257,6 +268,7 @@
 .ba_st_simple <- function(row, frame, lay, p, design, sr, rules) {
   id <- row$test; tv <- lay$treat[1]
   d <- frame; d$g_ <- droplevels(factor(d[[tv]])); lev <- levels(d$g_)
+  nominal <- is.factor(d$y_) && !is.ordered(d$y_)
   d$yn_ <- if (is.factor(d$y_)) as.integer(d$y_) else as.numeric(d$y_)
   d <- d[!is.na(d$yn_) & !is.na(d$g_), , drop = FALSE]
   req <- design$spec$analysis$posthoc
@@ -274,7 +286,7 @@
     data.frame(term = term, contrast = contrast, statistic_name = stat_name, statistic = unname(stat), df1 = unname(df1), df2 = unname(df2), p = unname(pv),
                estimate = unname(est), ci_low = unname(lo), ci_high = unname(hi), effect_name = eff_name, effect = unname(eff), n = n, stringsAsFactors = FALSE)
   ctr <- sprintf("%s - %s", lev[1], lev[2])
-  extra <- list()
+  extra <- list(); cells <- NULL
   if (id %in% c("t_test_welch", "t_test_student")) {
     ve <- id == "t_test_student"
     tt <- stats::t.test(yn_ ~ g_, data = d, var.equal = ve)
@@ -339,6 +351,14 @@
       h <- effectsize::cohens_h(t(matrix(c(x, n - x), ncol = 2)))   # effectsize: groups in columns
       flat <- fr(contrast = ctr, stat_name = "X-squared", stat = pt$statistic, df1 = pt$parameter, pv = pt$p.value, est = pt$estimate[1] - pt$estimate[2],
                  lo = pt$conf.int[1], hi = pt$conf.int[2], eff_name = "Cohen's h", eff = h$Cohens_h)
+      if (requireNamespace("epitools", quietly = TRUE)) {
+        # epitools: rows = groups (reference first), columns = no event, event; Wald CIs on the log scale
+        tb <- matrix(c(n - x, x), ncol = 2, dimnames = list(names(x), c("no", "yes")))
+        orr <- epitools::oddsratio(tb, method = "wald")$measure[2, ]; rr <- epitools::riskratio(tb, method = "wald")$measure[2, ]
+        c2 <- sprintf("%s vs %s", lev[2], lev[1])
+        flat <- rbind(flat, fr(contrast = c2, stat_name = "odds ratio (Wald, epitools)", stat = orr[["estimate"]], pv = pt$p.value, est = orr[["estimate"]], lo = orr[["lower"]], hi = orr[["upper"]], eff_name = "odds ratio", eff = orr[["estimate"]]),
+                      fr(contrast = c2, stat_name = "relative risk (Wald, epitools)", stat = rr[["estimate"]], pv = pt$p.value, est = rr[["estimate"]], lo = rr[["lower"]], hi = rr[["upper"]], eff_name = "relative risk", eff = rr[["estimate"]]))
+      }
     } else {
       flat <- fr(stat_name = "X-squared", stat = pt$statistic, df1 = pt$parameter, pv = pt$p.value)
       pa <- stats::pairwise.prop.test(x, n, p.adjust.method = adj); pr <- stats::pairwise.prop.test(x, n, p.adjust.method = "none")
@@ -346,15 +366,62 @@
     }
     extra <- list(proportions = as.list(stats::setNames(as.numeric(x / n), names(x))), yates = length(x) == 2L)
   } else if (id == "fisher_exact") {
-    tab <- table(d$g_, factor(d$yn_, levels = c(0, 1)))
-    ft <- stats::fisher.test(tab)
-    flat <- if (nrow(tab) == 2L) fr(contrast = ctr, stat_name = "odds ratio", stat = ft$estimate, pv = ft$p.value, est = ft$estimate, lo = ft$conf.int[1], hi = ft$conf.int[2],
+    tab <- if (nominal) table(d$g_, droplevels(d$y_)) else table(d$g_, factor(d$yn_, levels = c(0, 1)))
+    ft <- tryCatch(stats::fisher.test(tab), error = function(e) { notes <<- c(notes, "exact Fisher too large: Monte Carlo p (10000 tables)"); stats::fisher.test(tab, simulate.p.value = TRUE, B = 10000) })
+    flat <- if (all(dim(tab) == 2L)) fr(contrast = ctr, stat_name = "odds ratio", stat = ft$estimate, pv = ft$p.value, est = ft$estimate, lo = ft$conf.int[1], hi = ft$conf.int[2],
                                     eff_name = "odds ratio", eff = ft$estimate) else fr(stat_name = "exact", stat = NA_real_, pv = ft$p.value)
-    if (nrow(tab) > 2L) {
+    if (nrow(tab) > 2L && ncol(tab) == 2L) {
       pf <- rstatix::pairwise_fisher_test(tab, p.adjust.method = adj)
       ph <- data.frame(family = tv, by = NA_character_, contrast = sprintf("%s - %s", pf$group1, pf$group2), estimate = NA_real_, se = NA_real_, df = NA_real_,
                        statistic = NA_real_, p = pf$p, p_adj = pf$p.adj, adjust = adj, stringsAsFactors = FALSE)
     }
+  } else if (id == "mcnemar") {
+    w <- wide(); tb <- table(factor(w[, 1], c(0, 1)), factor(w[, 2], c(0, 1)))
+    b <- tb[2, 1]; cc <- tb[1, 2]                        # discordant: yes -> no (b), no -> yes (c)
+    mt <- stats::mcnemar.test(tb)
+    ex <- if (b + cc > 0) stats::binom.test(cc, b + cc, 0.5) else NULL
+    use_exact <- !is.null(ex) && (b + cc) <= (sr$mcnemar_exact_max %||% 20)
+    orc <- if (!is.null(ex)) ex$conf.int / (1 - ex$conf.int) else c(NA, NA)
+    flat <- fr(contrast = ctr, stat_name = if (use_exact) "exact binomial on discordant pairs" else "McNemar chi-squared", stat = if (use_exact) cc else mt$statistic,
+               df1 = if (use_exact) NA else 1, pv = if (use_exact) ex$p.value else mt$p.value, est = if (b > 0) cc / b else NA, lo = orc[1], hi = orc[2],
+               eff_name = sprintf("conditional odds ratio (%s yes / %s yes)", lev[2], lev[1]), eff = if (b > 0) cc / b else NA, n = nrow(w))
+    extra <- list(discordant = list(b = b, c = cc), chi_squared = unname(mt$statistic), chi_squared_p = mt$p.value, exact_p = if (!is.null(ex)) ex$p.value)
+    if (use_exact) notes <- c(notes, sprintf("%d discordant pairs (<= %g): exact binomial p", b + cc, sr$mcnemar_exact_max %||% 20))
+  } else if (id == "cochran_q") {
+    lw <- long_of(wide())
+    q <- rstatix::cochran_qtest(lw, yn_ ~ g_ | id_)
+    flat <- fr(stat_name = "Cochran's Q", stat = q$statistic, df1 = q$df, pv = q$p, n = length(unique(lw$id_)))
+    pm <- rstatix::pairwise_mcnemar_test(lw, yn_ ~ g_ | id_, p.adjust.method = adj)
+    ph <- data.frame(family = tv, by = NA_character_, contrast = sprintf("%s - %s", pm$group2, pm$group1), estimate = NA_real_, se = NA_real_, df = 1, statistic = NA_real_,
+                     p = pm$p, p_adj = pm$p.adj, adjust = adj, stringsAsFactors = FALSE)
+  } else if (id == "cmh") {
+    bv <- lay$blocks[1]
+    tb <- table(d$g_, factor(d$yn_, c(0, 1)), droplevels(factor(d[[bv]])))
+    mh <- stats::mantelhaen.test(tb)
+    two <- length(lev) == 2L
+    flat <- fr(contrast = if (two) sprintf("%s vs %s", lev[2], lev[1]) else NA, stat_name = sprintf("Cochran-Mantel-Haenszel chi-squared (strata: %s)", bv), stat = mh$statistic,
+               df1 = mh$parameter, pv = mh$p.value, est = if (two) mh$estimate else NA, lo = if (two) mh$conf.int[1] else NA, hi = if (two) mh$conf.int[2] else NA,
+               eff_name = if (two) "common odds ratio (Mantel-Haenszel)" else NA, eff = if (two) mh$estimate else NA)
+  } else if (id == "cochran_armitage") {
+    vv <- if (identical(lay$layout, "trend")) NULL else p$values[[tv]]
+    sc <- if (identical(lay$layout, "trend")) as.numeric(lev) else if (!is.null(vv) && length(vv$values) == length(lev)) vv$values[match(lev, vv$levels %||% lev)] else seq_along(lev)
+    x <- tapply(d$yn_, d$g_, sum); n <- tapply(d$yn_, d$g_, length)
+    ct <- stats::prop.trend.test(x, n, score = sc)
+    flat <- fr(stat_name = "Cochran-Armitage trend chi-squared", stat = ct$statistic, df1 = 1, pv = ct$p.value)
+    extra <- list(scores = as.list(sc), proportions = as.list(stats::setNames(as.numeric(x / n), names(x))))
+  } else if (id == "chisq_independence") {
+    tab <- table(d$g_, droplevels(d$y_))
+    cs <- suppressWarnings(stats::chisq.test(tab))
+    if (min(cs$expected) < (sr$min_expected %||% 5)) {
+      r2 <- .ba_st_simple(rules[rules$test == "fisher_exact", , drop = FALSE], frame, lay, p, design, sr, rules)
+      r2$summary$note <- paste(c(sprintf("smallest expected count %.2g < %g: Fisher's exact test instead of chi-squared", min(cs$expected), sr$min_expected %||% 5), r2$summary$note), collapse = "; ")
+      return(r2)
+    }
+    cv <- rstatix::cramer_v(tab)
+    flat <- fr(stat_name = "chi-squared", stat = cs$statistic, df1 = cs$parameter, pv = cs$p.value, eff_name = "Cramer's V", eff = cv)
+    res_ <- cs$residuals; contrib <- 100 * res_^2 / cs$statistic
+    cells <- data.frame(group = rep(rownames(tab), ncol(tab)), category = rep(colnames(tab), each = nrow(tab)), observed = c(tab), expected = c(cs$expected),
+                        pearson_residual = c(res_), contribution_pct = c(contrib), stringsAsFactors = FALSE)
   } else stop(sprintf("no adapter for stat test '%s'", id))
   if (!is.null(ph)) {
     f <- .ba_posthoc_select(ph, req, lev, adj, sr)
@@ -367,7 +434,7 @@
                                                                         families = list(tv)),
                         reference = row$reference, tutorial = row$doc, alternative = row$alternative,
                         note = if (length(notes)) paste(notes, collapse = "; ")), extra),
-       posthoc = ph, flat = flat)
+       posthoc = ph, flat = flat, cells = cells)
 }
 
 # stats::pairwise.* result (adjusted and raw) as a post-hoc table.
@@ -406,6 +473,7 @@
 
 # Descriptives per treatment cell (rstatix get_summary_stats "common" plus quartiles and skewness); binary: n, successes, proportion.
 .ba_descriptives <- function(frame, p, type, sr) {
+  if (type == "nominal") return(.ba_descriptives_nominal(frame, p))
   if (!type %in% c("continuous", "ordinal", "binary")) return(NULL)
   fx <- intersect(unique(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l))))), names(frame))
   gv <- fx[vapply(fx, function(v) identical(p$role[[v]] %||% "treatment", "treatment") && !is.numeric(frame[[v]]), logical(1))]
@@ -414,7 +482,8 @@
   out <- lapply(levels(cell), function(cl) {
     v <- y[cell == cl & !is.na(y)]; n <- length(v)
     key <- if (length(gv)) as.list(stats::setNames(strsplit(cl, " / ", fixed = TRUE)[[1]], gv)) else list(group = "all")
-    if (type == "binary") return(as.data.frame(c(key, list(n = n, successes = sum(v), proportion = mean(v))), stringsAsFactors = FALSE))
+    if (type == "binary") { ci <- if (n) stats::binom.test(sum(v), n)$conf.int else c(NA, NA)
+      return(as.data.frame(c(key, list(n = n, successes = sum(v), proportion = mean(v), ci_low = ci[1], ci_high = ci[2])), stringsAsFactors = FALSE)) }
     q <- stats::quantile(v, c(.25, .5, .75)); se <- stats::sd(v) / sqrt(n); sk <- .ba_skew(v)
     as.data.frame(c(key, list(n = n, mean = mean(v), sd = stats::sd(v), se = se, ci = stats::qt(0.975, n - 1) * se, median = unname(q[2]),
                               q1 = unname(q[1]), q3 = unname(q[3]), iqr = unname(q[3] - q[1]), min = min(v), max = max(v), skewness = sk,
@@ -474,4 +543,47 @@
   nz <- abs(ph$true[ok]) > 1e-9; sig <- ph$p_adj[ok] < alpha
   list(table = ph, summary = list(n = sum(ok), covered = sum(covered), coverage = round(mean(covered), 3), nominal = 1 - alpha,
                                   true_nonzero = sum(nz), detected = sum(sig & nz), true_zero = sum(!nz), false_calls = sum(sig & !nz)))
+}
+
+# Nominal outcome: counts and row proportions with exact CIs per treatment cell and category.
+.ba_descriptives_nominal <- function(frame, p) {
+  fx <- intersect(unique(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l))))), names(frame))
+  gv <- fx[vapply(fx, function(v) identical(p$role[[v]] %||% "treatment", "treatment") && !is.numeric(frame[[v]]), logical(1))]
+  cell <- if (length(gv)) interaction(frame[gv], drop = TRUE, sep = " / ") else factor(rep("all", nrow(frame)))
+  y <- droplevels(frame$y_)
+  do.call(rbind, lapply(levels(cell), function(cl) {
+    v <- y[cell == cl & !is.na(y)]; n <- length(v)
+    do.call(rbind, lapply(levels(y), function(k) { x <- sum(v == k); ci <- if (n) stats::binom.test(x, n)$conf.int else c(NA, NA)
+      data.frame(group = cl, category = k, n = n, count = x, proportion = if (n) x / n else NA_real_, ci_low = ci[1], ci_high = ci[2], stringsAsFactors = FALSE) }))
+  }))
+}
+
+# Goodness of fit to an expected ratio (analysis.expected_ratio), per treatment group and overall:
+# chi-squared (stats::chisq.test with p), exact multinomial (rstatix::multinom_test) when an expected count is small,
+# Cohen's w = sqrt(chi2 / N).
+.ba_goodness_of_fit <- function(frame, p, ratio, sr, type) {
+  r <- unlist(ratio); cats <- names(r)
+  y <- if (type == "binary") as.character(frame$y_) else as.character(frame$y_)
+  miss <- setdiff(unique(stats::na.omit(y)), cats)
+  if (length(miss)) return(list(summary = list(status = "not run", test = "goodness_of_fit", note = sprintf("categories %s are not in analysis.expected_ratio (%s)", paste(miss, collapse = ", "), paste(cats, collapse = ", ")))))
+  pr <- r / sum(r)
+  fx <- intersect(unique(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l))))), names(frame))
+  gv <- fx[vapply(fx, function(v) identical(p$role[[v]] %||% "treatment", "treatment") && !is.numeric(frame[[v]]), logical(1))]
+  grp <- if (length(gv)) as.character(interaction(frame[gv], drop = TRUE, sep = " / ")) else rep("all", nrow(frame))
+  groups <- c(if (length(gv)) unique(grp), "all")
+  rows <- lapply(groups, function(g) {
+    v <- y[(g == "all" | grp == g) & !is.na(y)]
+    x <- as.numeric(table(factor(v, levels = cats)))
+    cs <- suppressWarnings(stats::chisq.test(x, p = pr))
+    exact <- min(cs$expected) < (sr$min_expected %||% 5)
+    pv <- if (exact && requireNamespace("rstatix", quietly = TRUE)) rstatix::multinom_test(x, pr)$p else cs$p.value
+    data.frame(term = "category", contrast = g, statistic_name = if (exact) "exact multinomial (chi-squared shown)" else "goodness-of-fit chi-squared",
+               statistic = unname(cs$statistic), df1 = unname(cs$parameter), df2 = NA_real_, p = pv, estimate = NA_real_, ci_low = NA_real_, ci_high = NA_real_,
+               effect_name = "Cohen's w", effect = sqrt(unname(cs$statistic) / sum(x)), n = sum(x), stringsAsFactors = FALSE)
+  })
+  flat <- do.call(rbind, rows)
+  list(summary = list(status = "run", test = "goodness_of_fit", package = "stats", version = as.character(utils::packageVersion("stats")),
+                      factor = "category", expected_ratio = as.list(r), table = lapply(seq_len(nrow(flat)), function(i) as.list(flat[i, ])),
+                      reference = "Pearson 1900; Cohen 1988 (w)", tutorial = "docs/engines/categorical.md"),
+       flat = flat)
 }

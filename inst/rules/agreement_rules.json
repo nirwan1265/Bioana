@@ -1,0 +1,12 @@
+{
+  "_about": "Agreement between raters or methods (R/agreement.R, data_type ratings). Biodes: analysis.agreement = {raters: [columns] or rater_column + score_column + unit_column, scale: nominal | ordinal | continuous, levels: [lowest .. highest]}.",
+  "ordinal_primary": "linear",
+  "_note_ordinal_primary": "weighted kappa reported as primary for ordinal ratings: linear (Cicchetti-Allison, vcd Equal-Spacing); quadratic (Fleiss-Cohen) also reported.",
+  "icc_primary": "ICC2",
+  "icc_forms": {"ICC1": "one-way random, single rater", "ICC2": "two-way random, absolute agreement, single rater", "ICC3": "two-way mixed, consistency, single rater",
+                "ICC1k": "one-way random, mean of k raters", "ICC2k": "two-way random, absolute agreement, mean of k raters", "ICC3k": "two-way mixed, consistency, mean of k raters"},
+  "_note_icc_primary": "ICC2 (two-way, absolute agreement, single rater) is the usual choice when the same raters score every unit and any of them could score alone; ICC2k when the reported value is the raters' mean.",
+  "kappa_scale": {"breaks": [0, 0.21, 0.41, 0.61, 0.81], "labels": ["poor", "slight", "fair", "moderate", "substantial", "almost perfect"], "source": "Landis & Koch 1977"},
+  "icc_scale": {"breaks": [0.5, 0.75, 0.9], "labels": ["poor", "moderate", "good", "excellent"], "source": "Koo & Li 2016, applied to the lower 95% bound"},
+  "reference": "Cohen 1960 Educ Psychol Meas 20:37; Cohen 1968 Psychol Bull 70:213; Fleiss 1971 Psychol Bull 76:378; Shrout & Fleiss 1979 Psychol Bull 86:420; Landis & Koch 1977 Biometrics 33:159; Koo & Li 2016 J Chiropr Med 15:155; Meyer et al. vcd (CRAN); Revelle psych (CRAN)"
+}

@@ -20,7 +20,8 @@
   "default_family": {
     "continuous": "parametric",
     "ordinal": "nonparametric",
-    "binary": "parametric"
+    "binary": "parametric",
+    "nominal": "parametric"
   },
   "_note_default_family": "family of the test picked automatically per outcome type; others run when asked (analysis.stat_tests or params outcome = list(stat_tests = ...)).",
   "min_expected": 5,
@@ -29,5 +30,10 @@
   "_note_skew_report_median": "descriptives.tsv 'report' column: median (IQR) when |skewness| > this, else mean (SD).",
   "skew_note": 1,
   "_note_skew_note": "checks: residual (or difference) skewness beyond this is reported with the note that a log10 or square-root scale, or a GLM, may fit better; Bioana does not transform on its own.",
-  "adjust_nonparametric": "holm"
+  "adjust_nonparametric": "holm",
+  "mcnemar_exact_max": 20,
+  "_note_mcnemar_exact_max": "McNemar: with this many discordant pairs or fewer, the exact binomial p on the discordant pairs is the primary p (the chi-squared approximation is poor).",
+  "proportion_ci": "clopper-pearson",
+  "_note_proportion_ci": "descriptives of binary and nominal outcomes: exact (Clopper-Pearson, binom.test) 95% CI per proportion.",
+  "_note_expected_ratio": "goodness of fit: analysis.expected_ratio = {category: weight} (e.g. {'purple': 3, 'white': 1}); chi-squared against the ratio per treatment group and overall, the exact multinomial test (rstatix::multinom_test) when an expected count < min_expected; Cohen's w = sqrt(chi2 / N)."
 }

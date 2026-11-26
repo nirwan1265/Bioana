@@ -170,6 +170,9 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
 - 2026-11-26 survival (0.10.0): `docs/contracts/survival.md` asks Biodes for endpoint fields, event_codes,
   analysis.survival, event-based power, goal_effect.survival scale; asks Simitall for survival_model
   (weibull_ph, delayed_effect, crossing), loss censoring, competing events, frailty, survival truth.
+- 2026-11-26 categorical / correlation / agreement (0.11.0): `docs/contracts/categorical_correlation_agreement.md`
+  asks Biodes for nominal type + categories, expected_ratio, analysis.correlation + secondary_outcomes,
+  analysis.agreement; Simitall for nominal and segregation, paired binary, correlated secondary traits, ratings.
 
 ## Packages
 
