@@ -1,44 +1,80 @@
-# bioana
+# Bioana: analyses biological data and checks its own answers
 
-Analysis for the Biodes suite. Bioana takes a **Biodes design folder filled
-with data** — simulated by Simitall or measured by you — and runs, for every
-data set in it, the analysis that data type calls for, with the model the
-design calls for. When the data came from Simitall it also scores each result
-against the simulated truth.
+**Type a research question in plain words; get a designed experiment, data, and a statistically sound answer
+that has been checked against the known truth.** Bioana is the analysis step of a three-part suite for biology
+experiments:
 
-```
-question --Biodes--> design folder --Simitall or the lab--> data + data_manifest.json --Bioana--> results (+ truth scores) --Biopaint--> figures
-```
-
-| agent | repo | does |
+| Step | Tool | What it does |
 |---|---|---|
-| Biodes | [BioDesignGPT](https://github.com/nirwan1265/BioDesignGPT) (R package `studyforge`) | reads the question, designs the experiment: `study_spec.json`, `field_layout.csv` |
-| Simitall | [simitall](https://github.com/nirwan1265/simitall) | simulates the data the design would produce, with known truth |
-| **Bioana** | this repo (R package `bioana`) | analyses the data with the design's model |
-| Biopaint | (later) | figures |
+| 1. Design | [**Biodes**](https://github.com/nirwan1265/BioDesignGPT) | turns the question into a randomized experimental design: layout, sample sheet, model, sample size |
+| 2. Simulate | [**Simitall**](https://github.com/nirwan1265/simitall) | creates realistic data for that exact layout, with effects whose true size is known |
+| 3. Analyse | **Bioana** (this repository) | picks the standard R package for the data type (rrBLUP for GWAS, DESeq2 for RNA-seq, survival for time-to-event data, and many more), fits the design's model, and grades the answer against the truth |
 
-Bioana never reads the question: Biodes already turned it into a spec. It
-never simulates: it treats simulated and measured data the same way.
+Because the truth is known, every analysis is graded: did it find the real effects, did it report effects
+that are not there, and how close are the estimates? On real data, Bioana runs the same analysis without the
+grading.
 
-## Showcase
+## Example: does seed priming delay germination?
 
-[`examples/showcase/`](examples/showcase): three questions followed from Biodes (design) through Simitall
-(simulated data and truth) to Bioana (analysis scored against the truth): a sorghum GWAS (6 of 10 QTNs, no false
-positives), an RNA-seq genotype x drought interaction (DESeq2 vs edgeR against 500 planted genes), and seed
-priming with a delayed effect and seed rot (piecewise hazard ratios 0.63 and 0.67 against 0.6). Same folder names
-in all three repositories.
+A researcher asks:
 
-## Install
+> *"Seeds of 2 sorghum lines primed or not in 12 trays in a growth chamber, 10 seeds per treatment per tray,
+> days to germination checked every 2 days, followed for 21 days; seed rot can occur before germination; the
+> priming effect is delayed; hazard ratio 0.6; germination by day 7 and 14."*
+
+**Biodes designs it:** 12 trays, each with the 4 line x priming combinations once, 480 seeds. It also chooses a
+test suited to an effect that starts late and works out how many germinations are needed (121).
+
+![Biodes tray layout](examples/showcase/03_germination_survival/figures/biodes_design.png)
+
+**Simitall simulates it:** a germination day for each seed. After day 6, priming and line 2 each lower the
+germination rate to 60% (the truth). Some seeds rot first.
+
+![Simulated germination](examples/showcase/03_germination_survival/figures/simitall_data.png)
+
+**Bioana analyses it in one line of R:**
 
 ```r
-# install.packages("remotes")
-remotes::install_github("nirwan1265/bioana")
+library(bioana)
+res <- bioana_analyze("03_germination_survival")
 ```
 
-Needs `jsonlite`, `Matrix` and `lme4`; `lmerTest`, `MASS`, `ordinal` and
-`survival` are used for mixed models and non-Gaussian outcomes, `rrBLUP`,
-`BGLR` and `ranger` for GWAS and genomic prediction, `ggplot2` and `patchwork`
-for figures, when installed. Tests that simulate data need `simitall`.
+```
+      Kaplan-Meier [survival 3.5.8] median: genotype_1 / not primed 14 [10, 16] (75/120 events); genotype_2 / not primed 14 [10, 18] (67/120 events); genotype_1 / primed 16 [14, 18] (71/120 events); genotype_2 / primed NA [18, NA] (47/120 events)
+      weighted log-rank chi-squared (fh_0_1, prespecified)(3) = 23.2, p = 3.6e-05
+      Cox HR treatment2primed 0.83 [0.57, 1.21], p = 0.331
+      ...
+      goal truth (survival, terms treatment, treatment2): detected (p = 3.6e-05), estimate 0.63 vs true 0.6, in CI; piecewise HR after t = 5.99: treatment 0.63 [0.454, 0.873] vs 0.6, treatment2 0.667 [0.488, 0.911] vs 0.6; ...; per group 24/24 measures in CI
+```
+
+**The answer, graded:** yes. After day 6, primed seeds germinate at 0.67 times the rate of unprimed seeds
+(95% CI 0.49 to 0.91), against a truth of 0.6. A standard Cox model, which averages early and late, would have
+reported 0.83 with p = 0.33 and missed it. All 24 group summaries (medians, share germinated by day 7 and 14,
+mean time to germination) match the truth.
+
+## Two more examples
+
+| Question | Bioana's answer | Graded against the truth |
+|---|---|---|
+| Which DNA markers control plant height in 300 sorghum lines? (GWAS, rrBLUP) | 6 markers | 6 of the 10 real genes found, no false hits |
+| Which genes respond to drought differently in a mutant? (RNA-seq, DESeq2 and edgeR) | 273 genes (DESeq2), 91 (edgeR) | DESeq2: 215 of 500 real genes, but 1 in 5 calls false; edgeR: 89 real, 1 false |
+
+Each example (question, design figure, simulated data, R code, R output and graded answer) is in
+**[examples/showcase](examples/showcase)**.
+
+---
+
+# Technical reference
+
+Bioana takes a **Biodes design folder filled with data** (simulated by Simitall or measured by you) and runs,
+for every data set in it, the analysis that data type calls for, with the model the design calls for.
+
+```
+question --Biodes--> design folder --Simitall or the lab--> data + data_manifest.json --Bioana--> results (+ truth scores)
+```
+
+Bioana never reads the question: Biodes already turned it into a spec. It never simulates: it treats simulated
+and measured data the same way.
 
 ## Quick start
 
@@ -66,6 +102,13 @@ bioana_analyze("~/biodes_runs/my_design")
 ```
 
 ## Install
+
+```r
+# install.packages("remotes")
+remotes::install_github("nirwan1265/bioana")
+```
+
+With every engine (from a clone):
 
 ```bash
 git clone https://github.com/nirwan1265/bioana && cd bioana

@@ -1,5 +1,11 @@
 # 01 GWAS of plant height in a sorghum panel
 
+![Biodes design](figures/biodes_design.png)
+
+![Simitall data](figures/simitall_data.png)
+
+*Above: the field layout Biodes designed (300 lines, 2 replicates, alpha lattice) and the 10 genes Simitall planted. Overview of all three examples, with the R code and output: [../README.md](../README.md).*
+
 **Question** (to Biodes): "GWAS of plant height in 300 sorghum accessions grown in an alpha lattice with 2
 replicates at one location in one season."
 

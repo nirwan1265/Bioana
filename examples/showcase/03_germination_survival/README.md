@@ -1,5 +1,11 @@
 # 03 Seed priming: time to germination with a delayed effect and seed rot
 
+![Biodes design](figures/biodes_design.png)
+
+![Simitall data](figures/simitall_data.png)
+
+*Above: the tray layout Biodes designed (12 trays x 4 combinations) and the germination curves Simitall simulated. Overview of all three examples, with the R code and output: [../README.md](../README.md).*
+
 **Question** (to Biodes): "Seeds of 2 sorghum lines primed or not in 12 trays in a growth chamber, 10 seeds
 per treatment per tray, days to germination checked every 2 days, followed for 21 days; seed rot can occur
 before germination; the priming effect is delayed; hazard ratio 0.6; germination by day 7 and 14."

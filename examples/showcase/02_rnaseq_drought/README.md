@@ -1,5 +1,11 @@
 # 02 RNA-seq: genes whose drought response differs between genotypes
 
+![Biodes design](figures/biodes_design.png)
+
+![Simitall data](figures/simitall_data.png)
+
+*Above: the layout Biodes designed (16 plants in 4 blocks) and the drought responses Simitall planted. Overview of all three examples, with the R code and output: [../README.md](../README.md).*
+
 **Question** (to Biodes): "RNA-seq of leaves from wild type and mutant Arabidopsis under drought and
 well-watered conditions, 4 plants per genotype per treatment; we want genes whose drought response differs
 between genotypes."
