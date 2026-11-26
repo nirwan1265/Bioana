@@ -264,6 +264,14 @@ bioana_goals <- function() {
   }
   out$p <- p; out$detected <- isTRUE(p < alpha)
   te <- suppressWarnings(as.numeric(unlist(gt$true_effect)))
+  if (identical(type, "aft") && identical(g$test, "wald") && length(coefs) == 1L && length(te) == 1L) {
+    # time ratio: compared on the log scale (survreg coefficient and SE)
+    r <- res[res$term == coefs, , drop = FALSE]
+    out$estimate <- exp(r$estimate); out$true_effect <- te
+    out$bias <- r$estimate - log(te); out$covered <- abs(r$estimate - log(te)) <= stats::qnorm(1 - alpha / 2) * r$se
+    out$sign_agreement <- sign(r$estimate) == sign(log(te))
+    return(out)
+  }
   if (identical(g$test, "wald") && length(coefs) == 1L && length(te) == 1L && !isFALSE(out$predictor_match)) {
     r <- res[res$term == coefs, , drop = FALSE]
     out$estimate <- r$estimate; out$true_effect <- te

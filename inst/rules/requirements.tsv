@@ -36,3 +36,8 @@ car	CRAN	engines	type III ANOVA tables and Levene tests used with afex
 rstatix	CRAN	engines	Cohen's d, Wilcoxon r, eta2[H], Kendall's W, Dunn, Games-Howell, pairwise Fisher (stat_tests.tsv); reference values in tests
 effectsize	CRAN	engines	Cohen's h for two proportions (stat_tests.tsv prop_test)
 coin	CRAN	engines	standardized Z behind the Wilcoxon effect size r (rstatix::wilcox_effsize)
+cmprsk	CRAN	engines	competing risks: cumulative incidence, Gray test, Fine-Gray (survival_tests.R)
+survMisc	CRAN	engines	weighted log-rank (Gehan, Tarone-Ware, Fleming-Harrington) on request
+KMsurv	CRAN	engines	actuarial life tables on request (KMsurv::lifetab)
+haven	CRAN	readers	ADTTE in SAS formats (.xpt, .sas7bdat)
+survminer	CRAN	dev	reference values in tests (pairwise_survdiff)

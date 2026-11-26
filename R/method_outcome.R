@@ -23,6 +23,12 @@
   if (type == "survival") {
     ev <- suppressWarnings(as.numeric(meta[[entry$event_column %||% "event"]]))
     if (all(is.na(ev))) { ev <- rep(1, nrow(meta)); warn <- c(warn, "no event column: every time treated as an event") }
+    meta$event_raw_ <- ev
+    if (any(ev > 1, na.rm = TRUE)) {
+      # competing events (codes 2+): the Cox model is cause-specific for code 1; survival_tests.R uses the codes
+      warn <- c(warn, sprintf("competing events (codes %s): the Cox model is cause-specific for event code 1", paste(sort(setdiff(unique(ev), c(0, 1, NA))), collapse = ", ")))
+      ev <- as.numeric(ev == 1)
+    }
     meta$event_ <- ev
   }
   unit <- .ba_unit_id(meta)
@@ -47,7 +53,7 @@
     f <- stats::update(f, . ~ . + (1 | unit_id_))
   }
   frame <- .ba_frame(dat, p)
-  if (type == "survival") frame$event_ <- dat$event_
+  if (type == "survival") { frame$event_ <- dat$event_; frame$event_raw_ <- dat$event_raw_ }
   .ba_check_outcome_values(frame$y_, frame$event_, type, col)
   if (type == "ordinal") frame$y_ <- factor(frame$y_, ordered = TRUE)
   has_random <- length(.ba_findbars(f)) > 0
@@ -104,9 +110,11 @@
   }
   # classical ANOVA next to the model (stat_tests.tsv): repeated-measures / mixed / factorial, post-hoc, effect sizes
   st <- NULL
-  if (type %in% c("continuous", "ordinal", "binary") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
-    st <- tryCatch(.ba_stat_tests(frame, p, design, goal, alpha, type, args),
+  if (type %in% c("continuous", "ordinal", "binary", "survival") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
+    st <- tryCatch(if (type == "survival") { fr <- frame; fr$event_ <- fr$event_raw_ %||% fr$event_; .ba_survival_tests(fr, p, design, goal, alpha, args, fit) }
+                   else .ba_stat_tests(frame, p, design, goal, alpha, type, args),
                    error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
+    for (k in c("km_curve", "survival_summary", "landmarks", "life_table", "cif_curve")) if (!is.null(st[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(st[[k]], file.path(outdir, paste0(k, ".tsv"))), k))
     if (!is.null(st$descriptives)) paths <- c(paths, descriptives = .ba_write_tsv(st$descriptives, file.path(outdir, "descriptives.tsv")))
     if (!is.null(st$stat_table)) paths <- c(paths, stat_tests = .ba_write_tsv(st$stat_table, file.path(outdir, "stat_tests.tsv")))
     if (!is.null(st$anova_table)) paths <- c(paths, anova_table = .ba_write_tsv(st$anova_table, file.path(outdir, "anova_table.tsv")))
@@ -147,7 +155,12 @@
   }
   if (!is.null(truth) && !is.null(entry$truth$goal)) {
     gt <- truth[[entry$truth$goal$field %||% "goal_truth"]]
-    if (!is.null(gt)) summary$goal_recovery <- .ba_goal_recovery_outcome(gt, summary$goal, res, alpha, type)
+    if (!is.null(gt)) {
+      # Simitall's survival truth is a time ratio (AFT): score it against the AFT model of the truth's family
+      aft <- if (type == "survival" && grepl("time ratio", gt$effect_scale %||% "")) .ba_aft_for_truth(frame, p, truth$outcome_model$family %||% "lognormal_aft") else NULL
+      summary$goal_recovery <- .ba_goal_recovery_outcome(gt, summary$goal, if (!is.null(aft)) aft$res else res, alpha, if (!is.null(aft)) "aft" else type)
+      if (!is.null(aft)) summary$goal_recovery$scale <- aft$scale
+    }
   }
   # a numeric (trend) term has no per-level truth: its slope is scored by goal_recovery
   if (!is.null(truth) && length(intersect(p$numeric, p$vars)) && !is.null(summary$goal_recovery)) truth <- NULL

@@ -10,7 +10,7 @@ bioana_example(
 )
 }
 \arguments{
-\item{name}{Example name: \code{"airway"}.}
+\item{name}{Example name: \code{"airway"}, \code{"lung"}, \code{"colon"}, \code{"mgus2"} or \code{"rats"}.}
 
 \item{dir}{Folder to write (created; must not hold a design already).}
 }
@@ -27,6 +27,18 @@ package airway, LGPL; genes detected in at least 2 samples). It is the data
 set of the DESeq2 vignette. The design is a randomised complete block: cell
 line = block, dexamethasone = treatment, untreated = reference, so
 \code{analysis.model} is \code{y ~ treatment + block} (the vignette's \code{~ cell + dex}).
+}
+\details{
+Survival examples (data from the survival package, Therneau, LGPL; the data sets of the survival
+tutorials, e.g. datanovia's survival-analysis course):
+\code{"lung"}: NCCTG advanced lung cancer, 228 patients, survival by sex (Loprinzi et al. 1994,
+J Clin Oncol 12:601); landmarks at 180 and 360 days.
+\code{"colon"}: adjuvant colon cancer trial, death records, three arms (Obs, Lev, Lev+5FU; Moertel et
+al. 1990, NEJM 322:352); pairwise log-rank (BH).
+\code{"mgus2"}: 1384 patients with MGUS, progression to plasma-cell malignancy with death as a competing
+event (Kyle et al. 2002, NEJM 346:564); event codes 1 progression, 2 death.
+\code{"rats"}: 300 rats in 100 litters, drug vs control, tumour time (Mantel et al. 1977, Cancer Res
+37:3863); litter as a random intercept (frailty).
 }
 \examples{
 \dontrun{

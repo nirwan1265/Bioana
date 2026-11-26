@@ -1,3 +1,17 @@
+# bioana 0.10.0
+
+- Survival analysis next to the Cox engine (`R/survival_tests.R`, `survival_rules.json`): Kaplan-Meier medians,
+  quartiles, landmarks and curves; log-rank (stratified by the design's blocks), weighted log-rank on request
+  (survMisc), pairwise log-rank (`analysis.posthoc`); hazard ratios, concordance, global tests and the PH check
+  (`cox.zph`); RMST difference and ratio; AFT models by AIC on request (time ratios, Weibull HR); life tables
+  (KMsurv); competing risks (cmprsk: CIF, Gray, Fine-Gray; cause-specific Cox as the engine; 1 - KM vs CIF).
+- Examples from the survival package: `bioana_example("lung" | "colon" | "mgus2" | "rats")`; tests reproduce the
+  survival tutorials' numbers (lung medians 270 and 426 days, log-rank 10.3, stratified 10.8, FH(0,1) 3.45, HR 0.59;
+  colon RMST 111.3 days [19.3, 203.4], pairwise BH 0.005 and 0.81; mgus2 CIF 10% vs 1 - KM 21% at 20 years).
+- `bioana_adtte_design()`: CDISC ADTTE -> design folder (event = 1 - CNSR).
+- Goal truth as a time ratio (Simitall lognormal AFT) is scored with survreg of that family, not the Cox log HR.
+- Contract for Biodes and Simitall: `docs/contracts/survival.md`.
+
 # bioana 0.9.1
 
 - Biodes 0.6.5 `analysis.posthoc` with `factor`: post-hoc on that factor (and within each level of a factor

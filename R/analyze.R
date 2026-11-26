@@ -187,6 +187,8 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
 }
 
 .ba_print_stat_test <- function(st) {
+  if (identical(st$status, "run") && identical(st$test, "survival")) return(.ba_print_survival(st))
+  if (identical(st$status, "run") && identical(st$test, "competing_risks")) return(.ba_print_competing(st))
   if (!identical(st$status, "run")) { cat(sprintf("      test not run%s: %s\n", if (!is.null(st$test)) paste0(" (", st$test, ")") else "", st$note %||% "")); return(invisible()) }
   if (startsWith(st$test, "anova_")) {
     cat(sprintf("      ANOVA [%s %s] %s%s: %s\n", st$package, st$version, c(within = "repeated measures", mixed = "mixed (split-plot)", between = "factorial")[[st$layout]],
@@ -211,5 +213,34 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     paste(signif(vapply(st$sphericity, `[[`, 0, "mauchly_p"), 3), collapse = ", "), paste(signif(vapply(st$sphericity, `[[`, 0, "gg_epsilon"), 3), collapse = ", ")))
   w <- c(st$checks$warnings, st$note, ph$note)
   if (length(w)) cat(sprintf("      checks: %s\n", paste(w, collapse = "; ")))
+  invisible()
+}
+
+.ba_print_survival <- function(st) {
+  f <- function(x) if (is.na(x)) "NA" else format(signif(x, 4))
+  km <- vapply(st$km, function(r) sprintf("%s %s [%s, %s] (%d/%d events)", r$group, f(r$median), f(r$median_lcl), f(r$median_ucl), as.integer(r$events), as.integer(r$n)), "")
+  cat(sprintf("      Kaplan-Meier [survival %s] median: %s\n", st$version, paste(km, collapse = "; ")))
+  for (r in st$table) {
+    if (grepl("log-rank", r$statistic_name)) cat(sprintf("      %s(%g) = %.3g, p = %.3g\n", r$statistic_name, r$df1, r$statistic, r$p))
+    else if (grepl("hazard ratio \\(Cox", r$statistic_name)) cat(sprintf("      Cox HR %s %.3g [%.3g, %.3g], p = %.3g\n", r$contrast, r$estimate, r$ci_low, r$ci_high, r$p))
+    else if (grepl("^RMST", r$statistic_name)) cat(sprintf("      %s (%s): %s %.4g [%.4g, %.4g], p = %.3g; ratio %.3g\n", r$statistic_name, st$rmst$tau_source, r$contrast, r$estimate, r$ci_low, r$ci_high, r$p, r$effect))
+    else if (grepl("time ratio", r$statistic_name)) cat(sprintf("      %s %s %.3g [%.3g, %.3g], p = %.3g\n", r$statistic_name, r$contrast, r$estimate, r$ci_low, r$ci_high, r$p))
+  }
+  if (!is.null(st$cox)) cat(sprintf("      Cox: concordance %.3f, LR test p = %.3g%s\n", st$cox$concordance, st$cox$lr_test[[3]],
+    if (length(st$ph_check)) sprintf("; PH check (cox.zph) global p = %.3g", st$ph_check[[length(st$ph_check)]]$p) else ""))
+  ph <- st$posthoc
+  if (identical(ph$status, "run")) cat(sprintf("      pairwise log-rank (%s%s): %d comparisons, %d with adjusted p < 0.05\n", ph$adjust,
+    if (identical(ph$type, "vs_control")) ", vs control" else "", ph$n_comparisons, ph$n_significant))
+  if (!is.null(st$note)) cat(sprintf("      checks: %s\n", st$note))
+  invisible()
+}
+
+.ba_print_competing <- function(st) {
+  cat(sprintf("      competing risks [cmprsk %s], event of interest %s, competing: %s\n", st$version, st$event_of_interest, paste(setdiff(unlist(st$causes), st$event_of_interest), collapse = ", ")))
+  for (r in st$table) cat(if (!is.na(r$estimate)) sprintf("      %s: %s %.3g [%.3g, %.3g], p = %.3g\n", r$statistic_name, r$contrast, r$estimate, r$ci_low, r$ci_high, r$p)
+                          else sprintf("      %s(%g) = %.3g, p = %.3g\n", r$statistic_name, r$df1, r$statistic, r$p))
+  cat(sprintf("      cumulative incidence vs 1 - KM: %s\n",
+              paste(vapply(st$cif_vs_naive, function(r) sprintf("%s at %g %.3f vs %.3f", r$group, r$time, r$cif, r$one_minus_km), ""), collapse = "; ")))
+  if (!is.null(st$note)) cat(sprintf("      checks: %s\n", st$note))
   invisible()
 }

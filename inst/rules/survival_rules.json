@@ -1,0 +1,18 @@
+{
+  "_about": "Survival tests next to the Cox engine (R/survival_tests.R). The design picks what runs; Biodes may set analysis.survival = {landmarks: [times], rmst_tau: time, logrank_weight: name, aft: true | [distributions], life_table: interval width, strata: [factors]}. Checks (proportional hazards) are reported, never used to switch the primary test.",
+  "conf_type": "log",
+  "_note_conf_type": "survfit confidence intervals for survival and the median (survival package default; the median CI is the Brookmeyer-Crowley interval on this scale).",
+  "quantiles": [0.25, 0.5, 0.75],
+  "rmst_tau": "min_max_followup",
+  "_note_rmst_tau": "default horizon: the smallest of the groups' largest follow-up times, so tau is inside every group's support (Tian et al. 2020). analysis.survival.rmst_tau overrides; the report says which.",
+  "stratify_by_blocks": true,
+  "_note_stratify_by_blocks": "a design with blocks (RCBD reps, randomization strata) gets a stratified log-rank (strata(block)) as the primary test, the analysis matching the randomization; the unstratified test is reported next to it.",
+  "logrank_weight": "logrank",
+  "_note_logrank_weight": "names (survMisc::comp rows): logrank (FH 0,0), gehan (Gehan-Breslow), tarone_ware, peto (Peto-Peto, = survdiff rho 1), fh_1_0 (early), fh_0_1 (late), fh_1_1 (middle). Only the prespecified weight is the primary test; scanning weights for the smallest p is not done.",
+  "pairwise_adjust": "holm",
+  "aft_distributions": ["weibull", "exponential", "lognormal", "loglogistic"],
+  "_note_aft": "analysis.survival.aft = true fits every distribution and reports the time ratios of the lowest AIC (differences < 2 noted as indistinguishable); a list fits those. Weibull time ratios convert to hazard ratios: HR = TR^(-shape).",
+  "ph_alpha": 0.05,
+  "min_events_per_term": 10,
+  "_note_min_events_per_term": "Cox model with fewer events per coefficient than this is flagged (overfitting; Peduzzi et al. 1995)."
+}

@@ -167,6 +167,9 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
 - Biodes 0.6.5 (8a4f55f) `analysis.posthoc.factor` and Simitall 6d1e79e `within_subject` read (0.9.1).
   Note for Simitall: it keys repeated units on every layout column but the occasion; a layout with a
   per-sample column (sample_id) makes every unit unique and turns within_subject off silently.
+- 2026-11-26 survival (0.10.0): `docs/contracts/survival.md` asks Biodes for endpoint fields, event_codes,
+  analysis.survival, event-based power, goal_effect.survival scale; asks Simitall for survival_model
+  (weibull_ph, delayed_effect, crossing), loss censoring, competing events, frailty, survival truth.
 
 ## Packages
 
