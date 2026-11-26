@@ -25,6 +25,8 @@
   chk <- function(check, status, detail, value = NA_real_) checks[[length(checks) + 1L]] <<- list(check = check, status = status, detail = detail, value = unname(value))
   coefs <- if (logistic) .ba_reg_coef_logistic(fit, alpha) else .ba_reg_coef_linear(fit, alpha)
   coefs$predictor <- .ba_reg_term_label(coefs$term, label)
+  bl <- p$vars[vapply(p$vars, function(v) identical(p$role[[v]], "block"), logical(1))]
+  coefs$block <- vapply(coefs$term, function(t) any(startsWith(t, bl)) && !grepl(":", t), logical(1))
   # fit statistics
   fitstats <- if (logistic) .ba_reg_fit_logistic(fit) else .ba_reg_fit_linear(fit)
   # Type II tests per model term (car::Anova; F for lm, likelihood ratio for glm)
@@ -115,7 +117,7 @@
   list(summary = c(list(status = "run", model = if (logistic) "logistic regression (glm binomial)" else "linear regression (lm)",
                         package = "stats", version = as.character(utils::packageVersion("stats")), n = n, n_coefficients = k, fit = fitstats,
                         predictors = as.list(label), checks = checks, n_warn = sum(st == "warn"),
-                        coefficients = lapply(seq_len(nrow(coefs)), function(i) as.list(coefs[i, intersect(c("term", "predictor", "estimate", "se", "ci_low", "ci_high", "p", "std_beta", "p_hc3", "odds_ratio", "or_ci_low", "or_ci_high"), names(coefs))])),
+                        coefficients = lapply(seq_len(nrow(coefs)), function(i) as.list(coefs[i, intersect(c("term", "predictor", "estimate", "se", "ci_low", "ci_high", "p", "std_beta", "p_hc3", "odds_ratio", "or_ci_low", "or_ci_high", "block"), names(coefs))])),
                         type2_tests = if (!is.null(a2)) lapply(seq_len(nrow(a2)), function(i) as.list(a2[i, ])),
                         interactions = inter$summary, ancova = anc$summary, predictions = if (!is.null(pred)) nrow(pred),
                         reference = rr$reference, tutorial = "docs/engines/regression.md"), extra),
@@ -267,7 +269,7 @@
     }
   }
   if (requireNamespace("emmeans", quietly = TRUE)) {
-    em <- tryCatch(emmeans::emmeans(fit, stats::as.formula(paste("~", tv[1])), type = if (logistic) "response" else NULL), error = function(e) NULL)
+    em <- tryCatch(suppressMessages(emmeans::emmeans(fit, stats::as.formula(paste("~", tv[1])), type = if (logistic) "response" else NULL)), error = function(e) NULL)
     if (!is.null(em)) {
       d <- as.data.frame(summary(em, level = 1 - alpha))
       est <- intersect(c("emmean", "prob", "response"), names(d))[1]
@@ -289,12 +291,19 @@
   key <- function(nm) { v <- p$vars[p$vars == nm | label[p$vars] == nm | vapply(p$vars, function(z) identical(as.character(p$col[[z]]), nm), logical(1))]; if (length(v)) v[1] else nm }
   nd <- do.call(rbind, lapply(at, function(a) { a <- stats::setNames(a, vapply(names(a), key, "")); as.data.frame(a, stringsAsFactors = FALSE) }))
   vars <- intersect(names(mf)[-1], all.vars(stats::formula(fit)))
+  # values are given on the measured scale; a transformed covariate (analysis.covariates transform) is fitted on
+  # the transformed scale, so the value is transformed before predicting
+  raw <- nd
+  for (v in intersect(names(nd), vars)) { tf <- p$values[[v]]$transform; if (is.function(tf)) nd[[v]] <- tf(as.numeric(nd[[v]])) }
   for (v in vars) {
     if (!v %in% names(nd)) nd[[v]] <- if (is.numeric(mf[[v]])) mean(mf[[v]]) else levels(mf[[v]])[1]
     if (is.factor(mf[[v]])) nd[[v]] <- factor(as.character(nd[[v]]), levels = levels(mf[[v]]))
     else nd[[v]] <- as.numeric(nd[[v]])
   }
-  out <- nd[vars]; names(out) <- label[vars] %||% vars
+  out <- nd[vars]
+  sc <- vapply(vars, function(v) if (is.function(p$values[[v]]$transform)) sprintf(" (%s scale)", p$values[[v]]$scale) else "", "")
+  names(out) <- paste0(label[vars] %||% vars, sc)
+  for (v in vars[nzchar(sc)]) out[[label[[v]]]] <- if (v %in% names(raw)) as.numeric(raw[[v]]) else NA_real_   # the measured value, when given
   if (!logistic) {
     cf <- stats::predict(fit, nd, interval = "confidence", level = 1 - alpha); pr <- stats::predict(fit, nd, interval = "prediction", level = 1 - alpha)
     out$fit <- cf[, "fit"]; out$ci_low <- cf[, "lwr"]; out$ci_high <- cf[, "upr"]; out$pi_low <- pr[, "lwr"]; out$pi_high <- pr[, "upr"]

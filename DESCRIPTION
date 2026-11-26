@@ -1,6 +1,6 @@
 Package: bioana
 Title: Analyse Biodes Experiments, Simulated or Real
-Version: 0.13.1
+Version: 0.13.2
 Authors@R: person("Nirwan", "Tandukar", email = "tandukar.nirwan@gmail.com", role = c("aut", "cre"))
 Description: Reads a Biodes design folder (study_spec.json, field_layout.csv,
     sample metadata) and the data listed in its data_manifest.json, and runs

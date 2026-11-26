@@ -51,6 +51,12 @@ docs/engines/regression.md and docs/engines/robust.md (datanovia regression, pow
    (`source`: pilot, literature, or Cohen's convention: d 0.2/0.5/0.8, f 0.1/0.25/0.4, r 0.1/0.3/0.5,
    w 0.1/0.3/0.5, f2 0.02/0.15/0.35). Do not power on the study's own data. Note per-group vs total n.
 
+### Read since (Bioana 0.13.2): Biodes 0.6.8 (ff01031)
+
+Covariates (with `log(plant age)` written as `transform: "log"`), `regression`, ANCOVA `+ covariate`, goal
+`regression`, `predict_at` (measured values; transformed by Bioana), `robust`, power `source: "stated"` and
+`assumptions["power.method"]` all read. Trimmed means in an RCBD use `rmanova_trimmed` (blocks as the unit).
+
 ## Simitall
 
 1. Simulate covariates per unit: normal by default (`mean`, `sd` from `analysis.covariates` if given), with a

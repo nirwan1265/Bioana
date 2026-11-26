@@ -1,3 +1,14 @@
+# bioana 0.13.2
+
+Biodes 0.6.8 (ff01031) run through Bioana (soil phosphorus regression, log(age) x temperature, ANCOVA, logistic,
+trimmed means in an RCBD):
+
+- `predict_at` with a transformed covariate: the measured value is transformed before predicting (it was used
+  raw); the predictions table gives the fitted-scale value and the measured one.
+- Robust test in a randomized complete block (one plot per treatment per block): `rmanova_trimmed` with blocks
+  as the dependent unit (before: no robust test fitted). rmmcp post-hoc table fixed.
+- Report: block coefficients are no longer listed (they stay in regression_coefficients.tsv); emmeans' NOTE muffled.
+
 # bioana 0.13.1
 
 - Biodes 0e5dcc9: when the correlation method is not stated, each pair's method follows the traits' types

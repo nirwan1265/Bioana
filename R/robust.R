@@ -46,14 +46,15 @@
                   fr(paste(tv, collapse = ":"), NA, "robust two-way Q (trimmed means)", t2$Qab, pv = t2$AB.p.value))
   } else if (id == "rmanova_trimmed") {
     d$g_ <- droplevels(factor(d[[tv[1]]])); lev <- levels(d$g_)
-    w <- tapply(d$yn_, list(as.character(d[[lay$subject]]), d$g_), mean); w <- w[stats::complete.cases(w), , drop = FALSE]
+    sid <- lay$subject %||% lay$blocks[1]   # RCBD: the block is the dependent unit (one plot per treatment per block)
+    w <- tapply(d$yn_, list(as.character(d[[sid]]), d$g_), mean); w <- w[stats::complete.cases(w), , drop = FALSE]
     lw <- data.frame(id_ = factor(rep(rownames(w), ncol(w))), g_ = factor(rep(colnames(w), each = nrow(w)), colnames(w)), y = c(w))
     rm <- WRS2::rmanova(lw$y, lw$g_, lw$id_, tr = tr)
     flat <- fr(tv[1], NA, "robust repeated-measures F (trimmed means)", rm$test, rm$df1, rm$df2, rm$p.value)
     mc <- tryCatch(WRS2::rmmcp(lw$y, lw$g_, lw$id_, tr = tr), error = function(e) NULL)
     if (!is.null(mc)) { cm <- mc$comp
       ph <- data.frame(family = tv[1], by = NA_character_, contrast = sprintf("%s - %s", lev[cm[, 1]], lev[cm[, 2]]), estimate = cm[, "psihat"], se = NA_real_, df = NA_real_,
-                       statistic = cm[, "test"], p = cm[, "p.value"], p_adj = cm[, "p.crit"] * 0 + cm[, "p.value"], adjust = "Hochberg critical values (rmmcp)", stringsAsFactors = FALSE) }
+                       statistic = NA_real_, p = cm[, "p.value"], p_adj = stats::p.adjust(cm[, "p.value"], "hochberg"), adjust = "hochberg (rmmcp; same decisions as its critical values)", stringsAsFactors = FALSE) }
   } else if (id == "bwtrim") {
     bv <- lay$between[1]; wv <- lay$within[1]
     w <- stats::aggregate(d$yn_, list(id_ = d[[lay$subject]], b_ = d[[bv]], w_ = d[[wv]]), mean)

@@ -290,7 +290,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   if (!is.null(f$r_squared)) cat(sprintf("      %s: F(%g, %g) = %.4g, p = %.3g, R2 = %.4f, adj R2 = %.4f, residual SE %.4g (n = %d)\n", rg$model, f$df1, f$df2, f$F, f$p, f$r_squared, f$adj_r_squared, f$sigma, rg$n))
   else cat(sprintf("      %s: LR chi-squared(%g) = %.4g, p = %.3g, McFadden R2 %.3f, Nagelkerke R2 %.3f (n = %d, %d events)\n", rg$model, f$df, f$lr_chisq, f$p, f$mcfadden_r2, f$nagelkerke_r2, f$n, f$events))
   for (c in rg$coefficients) {
-    if (c$term == "(Intercept)") next
+    if (c$term == "(Intercept)" || isTRUE(c$block)) next   # block coefficients: in regression_coefficients.tsv
     if (!is.null(c$odds_ratio)) cat(sprintf("        %s: OR %.4g [%.4g, %.4g], p = %.3g\n", c$predictor, c$odds_ratio, c$or_ci_low, c$or_ci_high, c$p))
     else cat(sprintf("        %s: b = %.4g [%.4g, %.4g], p = %.3g%s%s\n", c$predictor, c$estimate, c$ci_low, c$ci_high, c$p,
                      if (!is.null(c$std_beta) && !is.na(c$std_beta)) sprintf(", beta %.3f", c$std_beta) else "",

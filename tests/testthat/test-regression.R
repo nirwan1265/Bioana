@@ -156,3 +156,33 @@ test_that("robust correlation (WRS2 percentage bend = datanovia mtcars r = -0.89
   utils::capture.output(r <- bioana_analyze(d, secondary = FALSE, only = "correlation"))
   expect_equal(round(r$results$correlation$r[1], 4), -0.8962); expect_equal(r$summary$analyses$correlation$package, "WRS2")
 })
+
+test_that("predict_at on a log-transformed covariate: the measured value is transformed (= predict(lm(y ~ log(x))))", {
+  set.seed(11); n <- 50; age <- stats::runif(n, 5, 60); y <- 2 + 1.5 * log(age) + stats::rnorm(n, 0, 0.3)
+  d <- reg_dir(data.frame(age = age, mass = y), "mass", list("age"), "y ~ covariate", extra = list(regression = list(predict_at = list(list(age = 30)))))
+  cv <- jsonlite::read_json(file.path(d, "study_spec.json")); cv$analysis$covariates[[1]]$transform <- "log"
+  jsonlite::write_json(cv, file.path(d, "study_spec.json"), auto_unbox = TRUE, null = "null", digits = NA)
+  x <- reg_run(d); pr <- rtsv(x, "predictions")
+  ref <- stats::predict(stats::lm(y ~ log(age)), data.frame(age = 30), interval = "prediction")
+  expect_equal(pr$fit, unname(ref[, "fit"])); expect_equal(pr$pi_low, unname(ref[, "lwr"])); expect_equal(pr$age, 30)
+  expect_equal(pr[["age..log.scale."]], log(30))
+})
+
+test_that("robust test on request in an RCBD (one plot per treatment per block): WRS2::rmanova with blocks as the dependent unit", {
+  skip_if_not_installed("WRS2")
+  set.seed(12); g <- expand.grid(treatment = c("N0", "N1", "N2", "N3"), block = 1:6, stringsAsFactors = FALSE)
+  g$plot <- seq_len(nrow(g)); g$sample_id <- paste0("S", g$plot)
+  g$primary_outcome <- 5 + 0.5 * as.integer(factor(g$treatment)) + stats::rnorm(6, 0, 0.5)[g$block] + stats::rnorm(nrow(g), 0, 0.3); g$primary_outcome[3] <- 30
+  d <- file.path(tempfile("rcbd_"), "design"); dir.create(d, recursive = TRUE)
+  spec <- list(handoff_version = "0.6.8", origin = "planned", organism = "t", system = "field", factors = list(list(name = "nitrogen", n_levels = 4L, levels = list("N0", "N1", "N2", "N3"))),
+               design = list(chosen = "rcbd"), primary_outcome = list(name = "yield", type = "continuous"),
+               analysis = list(model = "y ~ treatment + block", terms = list(treatment = "treatment", block = "block", layout_columns = list("treatment", "block")), stat_tests = list("robust")))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE)
+  utils::write.csv(g[c("plot", "treatment", "block")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(g, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome"))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); st <- r$summary$analyses$outcome$stat_test
+  rb <- Filter(function(s) identical(s$test, "rmanova_trimmed"), c(list(st), st$also))[[1]]
+  ref <- WRS2::rmanova(g$primary_outcome, factor(g$treatment), factor(g$block))
+  expect_equal(rb$table[[1]]$statistic, ref$test); expect_equal(rb$table[[1]]$p, ref$p.value)
+})
