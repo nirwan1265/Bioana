@@ -471,3 +471,16 @@ bioana_goals <- function() {
   })
   do.call(rbind, Filter(Negate(is.null), rows))
 }
+
+# Simitall adjustment_effects {term: {level: difference from the reference level}} (e923876): each level's
+# coefficient (term + level) against the planted difference, with its t interval. Not part of the goal.
+.ba_level_effect_recovery <- function(ae, res, alpha = 0.05) {
+  rows <- list()
+  for (v in names(ae)) for (l in names(ae[[v]])[-1]) {
+    r <- res[res$term == paste0(v, l), , drop = FALSE]; if (!nrow(r)) next
+    q <- if (is.finite(r$df[1])) stats::qt(1 - alpha / 2, r$df[1]) else stats::qnorm(1 - alpha / 2); tv <- as.numeric(ae[[v]][[l]])
+    rows[[length(rows) + 1L]] <- data.frame(term = r$term, true = tv, estimate = r$estimate, ci_low = r$estimate - q * r$se, ci_high = r$estimate + q * r$se,
+                                            covered = abs(r$estimate - tv) <= q * r$se, stringsAsFactors = FALSE)
+  }
+  if (length(rows)) do.call(rbind, rows)
+}

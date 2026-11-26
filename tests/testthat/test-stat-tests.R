@@ -189,4 +189,12 @@ test_that("adjustment factors (Biodes analysis.adjust_for / factors[].role adjus
   expect_equal(unlist(st$posthoc$families), "treatment")
   expect_match(st$posthoc$note, "adjustment factor")
   expect_equal(unlist(r$summary$analyses$outcome$goal$tested_terms), "treatment")   # the goal tests diet only (Simitall a1503f4)
+  # Simitall e923876 adjustment_effects: sex's coefficient scored against its planted difference
+  jsonlite::write_json(list(adjustment_effects = list(treatment2 = list(female = 0, male = 20)), goal_truth = list(goal = "treatment_effect", model_terms = list("treatment"),
+                       status = "planted", true_effect = 15)), file.path(d, "sim_truth.json"), auto_unbox = TRUE)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome",
+                                truth = list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "treatment_effect", field = "goal_truth", terms = list("treatment"), test = "wald"))))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); ad <- r$summary$analyses$outcome$goal_recovery$adjustment
+  expect_equal(ad$term, "treatment2male"); expect_equal(ad$true, 20)
+  expect_equal(ad$estimate, unname(stats::coef(stats::lm(primary_outcome ~ treatment + treatment2, data = g))["treatment2male"]))
 })

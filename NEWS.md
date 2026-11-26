@@ -1,3 +1,9 @@
+# bioana 0.13.6
+
+- Simitall e923876 `adjustment_effects`: each adjustment factor's level coefficient scored against its planted
+  difference (`goal_recovery.adjustment`; not part of the goal). Mice prompt, 100 seeds: diet 4.75 (SE 0.26) and
+  sex 5.08 (SE 0.24) against 5.
+
 # bioana 0.13.5
 
 - Treatment-effect goal: tests exactly `goal_terms` when given, never an adjustment factor (Simitall report: the

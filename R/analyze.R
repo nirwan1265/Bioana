@@ -194,6 +194,8 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
         paste0(if (isTRUE(gr$detected)) "detected" else "not detected", sprintf(" (p = %.3g)", gr$p),
                if (!is.null(gr$covered) && length(gr$estimate) == 1L && length(gr$true_effect) == 1L) sprintf(", estimate %.3g vs true %.3g, %s", gr$estimate, gr$true_effect, if (isTRUE(gr$covered)) "in CI" else "outside CI") else "",
                if (isTRUE(gr$probabilities$cells > 0)) sprintf(", class probabilities %d/%d in CI (largest difference %.3f)", gr$probabilities$covered, gr$probabilities$cells, gr$probabilities$max_abs_diff) else "",
+               if (length(gr$adjustment$term)) paste0("; adjustment ", paste(sprintf("%s %.3g vs %.3g%s", gr$adjustment$term, gr$adjustment$estimate, gr$adjustment$true,
+                                                                                     ifelse(gr$adjustment$covered, "", " (outside CI)")), collapse = ", ")) else "",
                if (!is.null(gr$note)) paste0("; ", gr$note) else "")))
     dg <- a$diagnostics
     if (!is.null(dg)) {

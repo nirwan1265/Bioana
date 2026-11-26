@@ -251,6 +251,8 @@
           summary$goal_recovery$covered <- gpr$covered == gpr$cells
         } else summary$goal_recovery$probabilities <- gpr
       }
+      ae <- truth$adjustment_effects %||% gt$adjustment_effects
+      if (length(ae) && type == "continuous") summary$goal_recovery$adjustment <- .ba_level_effect_recovery(ae, res, alpha)
       if (identical(goal$id, "regression") && (length(gt$true_slopes) || length(gt$true_log_odds_ratios))) {
         sl <- .ba_slope_recovery(gt, res, alpha, type, p)
         if (!is.null(sl)) {
