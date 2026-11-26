@@ -155,6 +155,10 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
   off by default; when on, scores/loadings files are recorded at `counts.hidden_factors` (top level
   of sim_truth.json, not under `assays.<assay>`; Bioana reads both). With n_latent = 2 Bioana attributes
   125 of those 132 to the hidden factors (share 0.25); 7 remain, as with n_latent = 0.
+- 2026-11-25, Biodes 38dce99 genotype x drought RNA-seq (4 per cell, 16 libraries, 12 residual df):
+  DESeq2 Wald is liberal on null genes even with no goal planted (p<0.05 7.4%, p<0.001 0.67%);
+  edgeR QL is calibrated (4.6%, 0.06%). Interaction goal: DESeq2 41 calls (12 unplanted), edgeR QL 0.
+  Open: rule for small designs (DESeq2 useT, or edgeR QL first), for Nirwan to decide.
 
 ## Packages
 
