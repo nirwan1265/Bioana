@@ -35,5 +35,12 @@
   "_note_mcnemar_exact_max": "McNemar: with this many discordant pairs or fewer, the exact binomial p on the discordant pairs is the primary p (the chi-squared approximation is poor).",
   "proportion_ci": "clopper-pearson",
   "_note_proportion_ci": "descriptives of binary and nominal outcomes: exact (Clopper-Pearson, binom.test) 95% CI per proportion.",
-  "_note_expected_ratio": "goodness of fit: analysis.expected_ratio = {category: weight} (e.g. {'purple': 3, 'white': 1}); chi-squared against the ratio per treatment group and overall, the exact multinomial test (rstatix::multinom_test) when an expected count < min_expected; Cohen's w = sqrt(chi2 / N)."
+  "_note_expected_ratio": "goodness of fit: analysis.expected_ratio = {category: weight} (e.g. {'purple': 3, 'white': 1}); chi-squared against the ratio per treatment group and overall, the exact multinomial test (rstatix::multinom_test) when an expected count < min_expected; Cohen's w = sqrt(chi2 / N).",
+  "categorical_block_terms": {
+    "min_units_per_block": 10,
+    "binary": "random",
+    "ordinal": "random",
+    "nominal": "drop"
+  },
+  "_note_categorical_block_terms": "fixed block terms in binary / ordinal / nominal models with fewer than min_units_per_block units per block: the block coefficients bias the odds ratios away from 1 (Neyman-Scott; pairs double the log OR). binary / ordinal -> a random block intercept (1 | block): glmer / clmm, ORs conditional on the block; nominal (no mixed engine) -> the block is dropped from the multinomial model (marginal ORs) and the generalized CMH test stratifies on it. Simitall check: 150 blocks of 2, true purple log OR 1.10, fixed blocks 2.13."
 }

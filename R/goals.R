@@ -66,9 +66,14 @@ bioana_goals <- function() {
   reg <- .ba_goal_registry()
   unknown_to_biodes <- !is.null(reg) && !id %in% reg$id
   eff <- a$goal_effect[[id]]
+  # Biodes 0.6.7: one-group studies (single_group, y ~ 1) write analysis.goals: [] -- no effect goal; the test comes
+  # from expected_ratio / correlation / agreement. The id stays for engine selection only.
+  pv <- design$parsed
+  no_terms <- !length(pv$fixed_labels) && !length(pv$random)
+  none <- is.null(args$goal) && (("goals" %in% names(a) && !length(listed)) || (no_terms && !length(listed)))
   list(id = id, source = src, assumed = assumed && src == "study_spec", assumed_why = if (assumed && src == "study_spec") why,
        terms = unlist(a$goal_terms[[id]]), effect = eff, listed = listed, note = if (length(note)) paste(note, collapse = "; "),
-       unknown_to_biodes = unknown_to_biodes)
+       unknown_to_biodes = unknown_to_biodes, none = none)
 }
 
 # time_course within one group (goal_effect.time_course group / group_factor): the model term and level,
@@ -367,4 +372,72 @@ bioana_goals <- function() {
   last <- nrow(a)
   list(statistic = as.numeric(a[last, scol]), df = abs(as.numeric(a[last, dcol])), p = as.numeric(a[last, pcol]),
        method = sprintf("anova(reduced, full)%s: %s", if (inherits(fit, "glm") && !inherits(fit, "negbin")) ", test = 'LRT'" else "", scol))
+}
+
+# Class probabilities per treatment group (nominal, and binary on the logit scale): Simitall's
+# outcome_model.group_probability {group: {category: p}} (binary: {group: P(y = 1)}), groups = the treatment cells
+# "a:b" in the model's treatment order. Estimate = the observed share in the group, with a Clopper-Pearson interval.
+# Simitall's probabilities are at an average unit; with block or unit effects the observed (marginal) share is
+# slightly closer to the overall mean.
+.ba_group_probability_recovery <- function(gp, frame, p, alpha = 0.05) {
+  if (!length(gp)) return(NULL)
+  tv <- intersect(p$vars[vapply(p$vars, function(v) identical(p$role[[v]] %||% "treatment", "treatment"), logical(1))], names(frame))
+  tv <- setdiff(tv, p$numeric)
+  grp <- if (length(tv)) do.call(paste, c(lapply(frame[tv], as.character), sep = ":")) else rep("all", nrow(frame))
+  y <- if (is.factor(frame$y_)) as.character(frame$y_) else as.character(frame$y_)
+  ok <- !is.na(y)
+  rows <- list()
+  for (g in names(gp)) {
+    sel <- ok & grp == g; n <- sum(sel)
+    if (!n) next
+    tp <- gp[[g]]
+    if (!is.list(tp)) tp <- list(`1` = tp)          # binary: P(y = 1)
+    for (k in names(tp)) {
+      x <- sum(y[sel] == k); ci <- stats::binom.test(x, n, conf.level = 1 - alpha)$conf.int
+      rows[[length(rows) + 1L]] <- data.frame(group = g, category = k, n = n, true_probability = as.numeric(tp[[k]]), estimate = x / n,
+                                              ci_low = ci[1], ci_high = ci[2], stringsAsFactors = FALSE)
+    }
+  }
+  if (!length(rows)) return(list(scored = FALSE, note = sprintf("group_probability groups (%s) not found in the data (treatment cells %s)",
+                                                                  paste(names(gp), collapse = ", "), paste(utils::head(unique(grp), 4), collapse = ", "))))
+  tb <- do.call(rbind, rows)
+  tb$covered <- tb$true_probability >= tb$ci_low & tb$true_probability <= tb$ci_high
+  list(scored = TRUE, table = tb, max_abs_diff = max(abs(tb$estimate - tb$true_probability)), covered = sum(tb$covered), cells = nrow(tb),
+       note = "observed share per group vs Simitall's class probability (at an average unit); Clopper-Pearson interval")
+}
+
+# Segregation ratio truth (Simitall outcome_model.true_ratio, expected_ratio, distorted) against the goodness-of-fit
+# test: detected = test rejects the expected ratio (p < alpha), correct when that matches `distorted`; each class's
+# observed share vs its true share (Clopper-Pearson).
+.ba_ratio_recovery <- function(om, st, frame, alpha = 0.05) {
+  g <- if (identical(st$test, "goodness_of_fit")) st else Filter(function(x) identical(x$test, "goodness_of_fit"), st$also %||% list())[1][[1]]
+  tr <- unlist(om$true_ratio); cats <- names(tr)
+  y <- as.character(frame$y_); y <- y[!is.na(y)]; n <- length(y)
+  tb <- do.call(rbind, lapply(cats, function(k) { x <- sum(y == k); ci <- stats::binom.test(x, n, conf.level = 1 - alpha)$conf.int
+    data.frame(category = k, n = n, true_share = tr[[k]], expected_share = as.numeric(unlist(om$expected_ratio)[k]) / sum(as.numeric(unlist(om$expected_ratio))),
+               estimate = x / n, ci_low = ci[1], ci_high = ci[2], stringsAsFactors = FALSE) }))
+  tb$covered <- tb$true_share >= tb$ci_low & tb$true_share <= tb$ci_high
+  pv <- if (!is.null(g)) { r <- Filter(function(x) identical(x$contrast, "all"), g$table); if (length(r)) r[[1]]$p else g$p } else NA_real_
+  dist <- isTRUE(om$distorted)
+  list(goal = "segregation_ratio", model_terms = list(), scored = !is.null(g), test = "goodness_of_fit",
+       p = pv, detected = isTRUE(pv < alpha), distorted = dist, correct = isTRUE(pv < alpha) == dist,
+       covered = all(tb$covered), largest_difference = max(abs(tb$estimate - tb$true_share)), table = tb,
+       note = sprintf("%s ratio %s; %s", if (dist) "distorted: true" else "true", paste(round(tr, 3), collapse = ":"),
+                      if (is.null(g)) "goodness-of-fit not run" else if (isTRUE(pv < alpha) == dist) "test call correct" else if (dist) "distortion missed" else "false rejection"))
+}
+
+# Simitall's binary logit truth: conditional_odds_ratios {term: {level: OR vs the reference}}, conditional on the
+# unit / block effects (random_effect_sd_logit). Compared with the model's log odds ratio (glmer with a random block
+# is conditional on the block; glm without unit effects is the same OR) and its Wald interval.
+.ba_odds_ratio_recovery <- function(cor, res, alpha = 0.05, conditional = TRUE) {
+  rows <- list()
+  for (v in names(cor)) { lv <- cor[[v]]
+    for (l in names(lv)[-1]) { r <- res[res$term == paste0(v, l), , drop = FALSE]
+      if (!nrow(r)) next
+      q <- stats::qnorm(1 - alpha / 2); tv <- as.numeric(lv[[l]])
+      rows[[length(rows) + 1L]] <- data.frame(term = r$term, true_or = tv, estimate = exp(r$estimate), ci_low = exp(r$estimate - q * r$se), ci_high = exp(r$estimate + q * r$se),
+                                              covered = abs(r$estimate - log(tv)) <= q * r$se, stringsAsFactors = FALSE) } }
+  if (!length(rows)) return(NULL)
+  list(table = do.call(rbind, rows), scale = sprintf("odds ratio (Simitall conditional_odds_ratios; the model's OR is %s)",
+                                                       if (conditional) "conditional on the random block / unit effect" else "marginal: no unit effects in the model"))
 }

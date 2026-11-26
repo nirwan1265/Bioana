@@ -1,3 +1,29 @@
+# bioana 0.12.0
+
+Biodes 0.6.7 (89e9b49) and Simitall 480f38d (docs/contracts/categorical_correlation_agreement.md):
+
+- `stat_test$p`: the headline p (row of the tested factor) at the top level, with `statistic_name`,
+  `statistic`, `df1`, `headline_term`. Simitall read `stat_test$p` as NA for nominal outcomes (only
+  `table[[i]]$p` existed, and `$p` partially matched `$package`).
+- Nominal outcomes in blocks: the generalized Cochran-Mantel-Haenszel test (`cmh` row now applies to nominal).
+- Small fixed blocks in binary / ordinal / nominal models (`stat_rules.json categorical_block_terms`): random
+  block (binary, ordinal) or dropped (nominal). Simitall check, 150 blocks of 2: the purple log OR was 2.13 with
+  fixed blocks (true 1.10), 1.02 without.
+- `single_group` / `goals: []`: no effect goal; segregation ratios scored against `true_ratio` / `distorted`
+  (3:1 kept, p 0.11; distorted 65:35 detected, p 1e-5).
+- Binary outcomes with two named categories coded 0 = first, 1 = second.
+- Correlation: trait names mapped to template columns (`primary_outcome`, `secondary_outcomes`); within-design
+  correlations scored against `secondary_traits.within_design_correlation` (10 seeds: mean 0.51, 0.48, 0.53 vs 0.5).
+- Agreement: long format skips the outcome entry; mean pairwise weighted kappas (linear, quadratic) for 3+
+  ordinal raters; ICC labels from the rules; scored against Simitall's `icc2` / `icc3` / `expected_kappa` /
+  `expected_weighted_kappa_quadratic` (ICC2 0.86 vs 0.85, kappa 0.53 vs 0.56, Fleiss 0.560 vs 0.559).
+- Class probabilities per group (nominal, binary logit) and conditional odds ratios (paired yes/no: 3.04 vs 3)
+  scored against Simitall's truth.
+- Survival, one row per subsample (Biodes `subsample` column, `analysis.survival.cluster`): plots are the
+  clusters. coxme fits now give hazard ratios in the survival layer (PH check on the fixed part); the robust
+  score row is printed.
+- Ordinal intercept-only fits (`y ~ 1`) no longer error.
+
 # bioana 0.11.4
 
 - Weighted log-rank in base R (Fleming-Harrington p,q, Gehan, Tarone-Ware, k groups): survMisc is no longer needed

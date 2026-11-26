@@ -82,6 +82,19 @@
 
   # Cox fit from the engine: hazard ratios, global tests, concordance, proportional-hazards check
   cox <- NULL; zph <- NULL
+  if (!is.null(fit) && inherits(fit, "coxme")) {
+    # coxme (random blocks / units as shared frailties): fixed-effect hazard ratios with Wald intervals; cox.zph
+    # does not take coxme fits, so the PH check runs on the fixed part (coxph without the random terms)
+    b <- coxme::fixef(fit); se <- sqrt(diag(as.matrix(stats::vcov(fit)))); z <- b / se; q <- stats::qnorm(0.975)
+    for (t in names(b)) rows[[length(rows) + 1L]] <- row(t, "hazard ratio (Cox, Wald z)", z[[t]], NA, 2 * stats::pnorm(-abs(z[[t]])),
+                                                         exp(b[[t]]), exp(b[[t]] - q * se[[t]]), exp(b[[t]] + q * se[[t]]), "hazard ratio", exp(b[[t]]), t)
+    cox <- list(n = fit$n[2], events = fit$n[1], random = lapply(coxme::VarCorr(fit), function(v) unname(v)))
+    fx <- tryCatch(survival::coxph(stats::as.formula(paste("survival::Surv(y_, event_) ~", if (length(p$fixed_labels)) paste(p$fixed_labels, collapse = " + ") else "1")), data = d), error = function(e) NULL)
+    z2 <- if (!is.null(fx) && length(stats::coef(fx))) tryCatch(survival::cox.zph(fx), error = function(e) NULL)
+    if (!is.null(z2)) { zt <- z2$table; gp <- unname(zt["GLOBAL", "p"])
+      zph <- lapply(rownames(zt), function(t) list(term = t, chisq = unname(zt[t, "chisq"]), df = unname(zt[t, "df"]), p = unname(zt[t, "p"]), on = "fixed part (coxph without random terms)"))
+      if (gp < (sr$ph_alpha %||% 0.05)) notes <- c(notes, sprintf("proportional hazards rejected on the fixed part (cox.zph global p = %.3g)", gp)) }
+  }
   if (!is.null(fit) && inherits(fit, "coxph")) {
     s <- summary(fit)
     ci <- s$conf.int; co <- s$coefficients

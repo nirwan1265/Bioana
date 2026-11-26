@@ -301,6 +301,24 @@ simulation (and the helpers its simulators need, e.g. pseudobulk
 aggregation), and calls `bioana::bioana_analyze()` for its power sweep and
 `simitall_from_question()`.
 
+## Categorical, correlation, agreement handoff (0.12.0, 2026-11-26; tell Biodes and Simitall)
+
+Contract and scoring: docs/contracts/categorical_correlation_agreement.md ("Read since").
+Open on the other side:
+- Simitall: a binary outcome with `analysis.expected_ratio` is drawn at `prevalence` (liability threshold), not from
+  the ratio, and has no `true_ratio`. Draw it from the ratio (like nominal) and write the class labels or 0 = first
+  category, 1 = second.
+- Simitall: long-format agreement (Biodes 0.6.7 writes `rater_column`) is not simulated: the ratings are independent
+  draws and the truth has no `agreement` block.
+- Simitall: Biodes 0.6.7 survival subsamples (template one row per seed, layout one row per plot) stop with "different
+  row counts". Join on `plot`.
+- Simitall: the planted trait correlation is on the latent scale; for a count (or binary) primary the written
+  values do not carry it (within-design r about 0).
+- Biodes: "how do plant height, tiller number and grain weight relate?" types plant height as a count (from
+  "tiller number"?). The four-raters prompt asks cell-culture questions (known).
+- Biodes: nominal and paired binary designs as RCBD with blocks of 2 (150 blocks): fine for Bioana now (random or
+  dropped block, stratified test), but a CRD or `paired: true` says what is meant.
+
 ## Next
 
 The checklist is "Future analyses to check" in README.md. In short: wire the

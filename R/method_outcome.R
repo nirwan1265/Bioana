@@ -18,6 +18,16 @@
   p <- design$parsed
   warn <- character()
   y <- if (type == "nominal") { z <- trimws(as.character(meta[[col]])); z[z == ""] <- NA; z } else suppressWarnings(as.numeric(meta[[col]]))
+  if (type == "binary") {
+    # two named categories (Biodes 0.6.7 primary_outcome.categories, else expected_ratio labels): 0 = the first
+    # (reference), 1 = the second
+    z <- trimws(as.character(meta[[col]])); cats <- as.character(unlist(design$spec$primary_outcome$categories %||% names(design$spec$analysis$expected_ratio)))
+    lab <- !is.na(z) & z != "" & is.na(suppressWarnings(as.numeric(z)))
+    if (any(lab) && length(cats) == 2L && all(z[lab] %in% cats)) {
+      y[lab] <- match(z[lab], cats) - 1
+      warn <- c(warn, sprintf("binary outcome coded 0 = %s (reference), 1 = %s (primary_outcome.categories)", cats[1], cats[2]))
+    }
+  }
   if (!any(!is.na(y))) stop(sprintf("Column '%s' of the sample metadata is empty: nothing to fit.", col), call. = FALSE)
   meta$y_ <- y
   if (type == "survival") {
@@ -31,7 +41,7 @@
     }
     meta$event_ <- ev
   }
-  unit <- .ba_unit_id(meta)
+  unit <- .ba_outcome_unit(meta, spec)
   cell <- do.call(paste, c(list(unit), lapply(p$vars, function(v) meta[[p$col[[v]]]]), sep = "\r"))
   has_subs <- anyDuplicated(cell[!is.na(unit)]) > 0
   if (has_subs && subsamples == "as_replicates") {
@@ -86,6 +96,23 @@
         p$fixed_labels <- setdiff(p$fixed_labels, l)
         warn <- c(warn, sprintf("block term %s (%d blocks) fitted as a shared frailty (1 | %s): fixed coefficients for many small blocks diverge (survival_rules.json)", v, nb, v))
       } else warn <- c(warn, sprintf("block term %s (%d blocks) fitted as strata(%s) in the Cox model", v, nb, v))
+    }
+  }
+  p_stat <- p   # the stat layer sees the design's blocks (stratified tests) even when the model drops them
+  if (type %in% c("binary", "ordinal", "nominal")) {
+    # small fixed blocks bias odds ratios (stat_rules.json categorical_block_terms): random (binary, ordinal) or dropped (nominal)
+    cb <- .ba_rules("stat_rules")$categorical_block_terms
+    for (l in p$fixed_labels) {
+      v <- all.vars(str2lang(l))
+      if (length(v) != 1L || !identical(p$role[[v]], "block")) next
+      per <- sum(!is.na(frame$y_)) / max(1, length(unique(stats::na.omit(frame[[v]]))))
+      if (per >= (cb$min_units_per_block %||% 10)) next
+      act <- cb[[type]] %||% "random"
+      f <- stats::update(f, stats::as.formula(if (act == "random") sprintf(". ~ . - %s + (1 | %s)", v, v) else sprintf(". ~ . - %s", v)))
+      p$fixed_labels <- setdiff(p$fixed_labels, l)
+      warn <- c(warn, sprintf("block term %s (%.1f units per block) %s: fixed coefficients for small blocks bias the odds ratios away from 1 (stat_rules.json categorical_block_terms)",
+                              v, per, if (act == "random") sprintf("fitted as a random intercept (1 | %s); odds ratios are conditional on the block", v)
+                                      else "dropped from the model (marginal odds ratios); the test stratifies on it"))
     }
   }
   has_random <- length(.ba_findbars(f)) > 0
@@ -152,7 +179,7 @@
   st <- NULL
   if (type %in% c("continuous", "ordinal", "binary", "nominal", "survival") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
     st <- tryCatch(if (type == "survival") { fr <- frame; fr$event_ <- fr$event_raw_ %||% fr$event_; .ba_survival_tests(fr, design$parsed, design, goal, alpha, args, fit) }
-                   else .ba_stat_tests(frame, p, design, goal, alpha, type, args),
+                   else .ba_stat_tests(frame, p_stat, design, goal, alpha, type, args),
                    error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
     for (k in c("km_curve", "survival_summary", "landmarks", "life_table", "cif_curve", "cells")) if (!is.null(st[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(st[[k]], file.path(outdir, paste0(k, ".tsv"))), k))
     if (!is.null(st$descriptives)) paths <- c(paths, descriptives = .ba_write_tsv(st$descriptives, file.path(outdir, "descriptives.tsv")))
@@ -193,7 +220,11 @@
     }
     if (!is.null(truth$within_subject)) summary$stat_test$truth_within_subject <- truth$within_subject[intersect(c("structure", "rho", "slope_sd", "over"), names(truth$within_subject))]
   }
-  if (!is.null(truth) && !is.null(entry$truth$goal)) {
+  if (!is.null(truth) && isTRUE(goal$none) && length(truth$outcome_model$true_ratio)) {
+    summary$goal_recovery <- .ba_ratio_recovery(truth$outcome_model, st$summary, frame, alpha)
+    if (!is.null(summary$goal_recovery$table)) { paths[["ratio"]] <- .ba_write_tsv(summary$goal_recovery$table, file.path(outdir, "ratio_recovery.tsv")); summary$goal_recovery$table <- NULL }
+  }
+  if (!is.null(truth) && !is.null(entry$truth$goal) && !isTRUE(goal$none)) {
     gt <- truth[[entry$truth$goal$field %||% "goal_truth"]]
     if (!is.null(gt)) {
       # Simitall's survival truth is a time ratio (AFT): score it against the AFT model of the truth's family
@@ -202,6 +233,24 @@
       if (!is.null(aft)) summary$goal_recovery$scale <- aft$scale
       if (type == "survival" && (isFALSE(gt$proportional_hazards) || isFALSE(goal$effect$proportional_hazards)))
         summary$goal_recovery <- .ba_goal_recovery_nonph(summary$goal_recovery, gt, truth$outcome_model, goal, design, frame, p, res, alpha)
+      if (type %in% c("nominal", "binary") && length(truth$outcome_model$group_probability)) {
+        gpr <- .ba_group_probability_recovery(truth$outcome_model$group_probability, frame, p, alpha)
+        if (isTRUE(gpr$scored)) {
+          paths[["group_probability"]] <- .ba_write_tsv(gpr$table, file.path(outdir, "group_probability_recovery.tsv"))
+          summary$goal_recovery[c("estimate", "true_effect", "bias", "sign_agreement")] <- NULL
+          summary$goal_recovery$scale <- "class probability per group (Simitall group_probability)"
+          summary$goal_recovery$probabilities <- gpr[c("max_abs_diff", "covered", "cells", "note")]
+          summary$goal_recovery$covered <- gpr$covered == gpr$cells
+        } else summary$goal_recovery$probabilities <- gpr
+      }
+      if (type == "binary" && length(truth$outcome_model$conditional_odds_ratios)) {
+        orr <- .ba_odds_ratio_recovery(truth$outcome_model$conditional_odds_ratios, res, alpha, has_random)
+        if (!is.null(orr)) {
+          summary$goal_recovery$odds_ratios <- orr$table
+          if (nrow(orr$table) == 1L) summary$goal_recovery[c("estimate", "true_effect", "covered")] <- list(orr$table$estimate, orr$table$true_or, orr$table$covered)
+          summary$goal_recovery$scale <- orr$scale
+        }
+      }
       if (isFALSE(diag_engine$converged)) { summary$goal_recovery$scored <- FALSE
         summary$goal_recovery$note <- paste(c(summary$goal_recovery$note, "Cox fit did not converge: not scored"), collapse = "; ") }
     }
@@ -251,6 +300,7 @@
     } else {
       cf <- summary(fit)$coefficients; cf[!rownames(cf) %in% names(fit$alpha), , drop = FALSE]
     }
+    if (!length(co) || !nrow(co)) return(data.frame(term = character(), estimate = numeric(), se = numeric(), df = numeric(), statistic = numeric(), p = numeric()))   # y ~ 1
     return(data.frame(term = rownames(co), estimate = co[, 1], se = co[, 2], df = Inf, statistic = co[, 3], p = co[, 4],
                       stringsAsFactors = FALSE, row.names = NULL))
   }
@@ -410,3 +460,13 @@
 
 # One-line formula text for the report (no deparse line breaks).
 .ba_formula_text <- function(f) gsub("\\s+", " ", paste(deparse(f, width.cutoff = 500L), collapse = " "))
+
+# Experimental unit of each metadata row: unit_id (.ba_unit_id, shared with Simitall); else Biodes 0.6.7's one row
+# per subsample -- the analysis.survival.cluster column, or plot when there is a subsample column; else sample_id.
+.ba_outcome_unit <- function(meta, spec) {
+  if ("unit_id" %in% names(meta)) return(meta$unit_id)
+  cl <- spec$analysis$survival$cluster %||% spec$analysis$cluster
+  if (!is.null(cl) && cl %in% names(meta)) return(as.character(meta[[cl]]))
+  if ("subsample" %in% names(meta) && "plot" %in% names(meta)) return(as.character(meta$plot))
+  .ba_unit_id(meta)
+}

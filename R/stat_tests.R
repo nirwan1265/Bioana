@@ -67,6 +67,7 @@
   sr <- .ba_rules("stat_rules")
   desc <- .ba_descriptives(frame, p, type, sr)
   gof <- if (type %in% c("nominal", "binary") && length(design$spec$analysis$expected_ratio)) .ba_goodness_of_fit(frame, p, design$spec$analysis$expected_ratio, sr, type) else NULL
+  if (!is.null(gof)) gof$summary <- .ba_stat_headline(gof$summary)
   if (identical(lay$layout, "none")) {
     if (!is.null(gof)) return(list(summary = gof$summary, stat_table = gof$flat, descriptives = desc))
     return(list(summary = list(status = "not run", note = lay$reason), descriptives = desc))
@@ -96,6 +97,8 @@
              error = function(e) list(summary = list(status = "error", test = id, note = conditionMessage(e))))
   })
   if (!is.null(gof)) res <- c(res, list(gof))
+  key <- c(goal$tested_terms, goal$terms, lay$treat)
+  res <- lapply(res, function(r) { r$summary <- .ba_stat_headline(r$summary, key); r })
   main <- res[[1]]$summary
   if (length(notes)) main$note <- paste(c(main$note, notes), collapse = "; ")
   if (length(res) > 1L) main$also <- lapply(res[-1], `[[`, "summary")
@@ -396,10 +399,11 @@
                      p = pm$p, p_adj = pm$p.adj, adjust = adj, stringsAsFactors = FALSE)
   } else if (id == "cmh") {
     bv <- lay$blocks[1]
-    tb <- table(d$g_, factor(d$yn_, c(0, 1)), droplevels(factor(d[[bv]])))
-    mh <- stats::mantelhaen.test(tb)
-    two <- length(lev) == 2L
-    flat <- fr(contrast = if (two) sprintf("%s vs %s", lev[2], lev[1]) else NA, stat_name = sprintf("Cochran-Mantel-Haenszel chi-squared (strata: %s)", bv), stat = mh$statistic,
+    nominal <- is.factor(d$y_) && !all(levels(d$y_) %in% c("0", "1"))   # categories, not 0/1
+    tb <- table(d$g_, if (nominal) droplevels(d$y_) else factor(d$yn_, c(0, 1)), droplevels(factor(d[[bv]])))
+    mh <- stats::mantelhaen.test(tb)   # 2 x 2 x k: Mantel-Haenszel with common OR; larger: generalized CMH (general association)
+    two <- length(lev) == 2L && dim(tb)[2] == 2L
+    flat <- fr(contrast = if (two) sprintf("%s vs %s", lev[2], lev[1]) else NA, stat_name = sprintf("%sCochran-Mantel-Haenszel chi-squared (strata: %s)", if (two) "" else "generalized ", bv), stat = mh$statistic,
                df1 = mh$parameter, pv = mh$p.value, est = if (two) mh$estimate else NA, lo = if (two) mh$conf.int[1] else NA, hi = if (two) mh$conf.int[2] else NA,
                eff_name = if (two) "common odds ratio (Mantel-Haenszel)" else NA, eff = if (two) mh$estimate else NA)
   } else if (id == "cochran_armitage") {
@@ -563,7 +567,9 @@
 # Cohen's w = sqrt(chi2 / N).
 .ba_goodness_of_fit <- function(frame, p, ratio, sr, type) {
   r <- unlist(ratio); cats <- names(r)
-  y <- if (type == "binary") as.character(frame$y_) else as.character(frame$y_)
+  y <- as.character(frame$y_)
+  # a binary outcome stored as 0/1: 0 = the first category, 1 = the second (the ratio's labels, in Biodes' order)
+  if (type == "binary" && length(cats) == 2L && all(stats::na.omit(y) %in% c("0", "1"))) y <- cats[as.integer(y) + 1L]
   miss <- setdiff(unique(stats::na.omit(y)), cats)
   if (length(miss)) return(list(summary = list(status = "not run", test = "goodness_of_fit", note = sprintf("categories %s are not in analysis.expected_ratio (%s)", paste(miss, collapse = ", "), paste(cats, collapse = ", ")))))
   pr <- r / sum(r)
@@ -586,4 +592,18 @@
                       factor = "category", expected_ratio = as.list(r), table = lapply(seq_len(nrow(flat)), function(i) as.list(flat[i, ])),
                       reference = "Pearson 1900; Cohen 1988 (w)", tutorial = "docs/engines/categorical.md"),
        flat = flat)
+}
+
+# Headline of a test (top-level statistic_name / statistic / df / p): the table row of the tested factor (goal terms,
+# else the treatment), else the first row. Readers (Simitall) take stat_test$p; the full table stays in $table.
+.ba_stat_headline <- function(s, key = character()) {
+  tb <- s$table
+  if (!length(tb) || !is.null(s[["p"]])) return(s)   # [[ ]]: $p would partially match $package
+  terms <- vapply(tb, function(r) as.character(r$term %||% NA), "")
+  i <- which(terms %in% key & !vapply(tb, function(r) is.na(r$p %||% NA), logical(1)))[1]
+  if (is.na(i)) i <- which(!vapply(tb, function(r) is.na(r$p %||% NA), logical(1)))[1]
+  if (is.na(i)) i <- 1L
+  r <- tb[[i]]
+  s[c("headline_term", "statistic_name", "statistic", "df1", "df2", "p")] <- list(r$term, r$statistic_name, r$statistic, r$df1, r$df2, r$p)
+  s
 }

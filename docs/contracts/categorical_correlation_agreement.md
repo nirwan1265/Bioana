@@ -33,7 +33,36 @@ Bioana 0.11.0. Nothing here blocks: Bioana picks the test from the design and th
 4. Ratings: continuous = true value + rater bias + rater noise (truth: the true ICC2 from the
    variances); categorical = a misclassification matrix per rater (truth: the expected kappa).
 
+## Read since (Bioana 0.12.0; Biodes 0.6.7 89e9b49, Simitall 480f38d)
+
+- `single_group` (`y ~ 1`, `analysis.goals: []`): no effect goal. The test comes from `expected_ratio`
+  (goodness of fit), `correlation` or `agreement`. With long-format agreement (`rater_column`,
+  `score_column` = the outcome column) the outcome entry is skipped: the column holds the scores.
+- Binary with two `primary_outcome.categories` (or `expected_ratio` labels): text values coded
+  0 = the first category (reference), 1 = the second; 0/1 values are read that way for the goodness of fit.
+- `analysis.correlation.variables`: trait names. `primary_outcome.name` -> column `primary_outcome`,
+  `secondary_outcomes[{name, column}]` -> their columns (names are matched case- and punctuation-free).
+- Survival with one row per subsample: the unit is `analysis.survival.cluster` (or `plot` when there is a
+  `subsample` column); clusters get a shared frailty and the robust score test.
+- `stat_test$p` (and `statistic_name`, `statistic`, `df1`, `headline_term`): the headline test, the row of the
+  tested factor. Before 0.12.0 only `stat_test$table[[i]]$p` existed, and `$p` partially matched `$package`.
+- Small fixed blocks in binary / ordinal / nominal models (< 10 units per block, `stat_rules.json`): binary
+  and ordinal get a random block intercept (ORs conditional on the block); nominal drops the block from the
+  multinomial model, and the generalized CMH test stratifies on it. Fixed coefficients for pairs double the log OR.
+
+Truth scored (`goal_recovery` / `recovery`):
+
+| Simitall truth | Bioana estimate | Output |
+|---|---|---|
+| `outcome_model.group_probability` | observed share per treatment cell, Clopper-Pearson CI | `group_probability_recovery.tsv`, `goal_recovery.probabilities` |
+| `outcome_model.conditional_odds_ratios` | model OR (glmer with random block = conditional), Wald CI | `goal_recovery.odds_ratios` |
+| `outcome_model.true_ratio`, `distorted` | goodness-of-fit p (detected = distorted?), class shares with CIs | `ratio_recovery.tsv`, `goal_recovery` (goal `segregation_ratio`) |
+| `secondary_traits.within_design_correlation` | within-design (residual) correlation, cor.test CI | `correlation_recovery.tsv`, `recovery` |
+| `agreement.icc2` / `icc3` | psych ICC2 / ICC3 with CI | `agreement_recovery.tsv` |
+| `agreement.expected_kappa`, `expected_weighted_kappa_quadratic` | Cohen's (2 raters, CI) or Fleiss' and Light's kappa; quadratic weighted kappa (mean of pairs for 3+) | `agreement_recovery.tsv` |
+
 ## Files Bioana writes (for Biopaint)
 
 `cells.tsv` (chi-squared residuals), `descriptives.tsv` (counts, proportions, exact CIs),
-`correlation.tsv`, `correlation_matrix*.tsv`, `agreement.tsv`, `agreement_table.tsv`.
+`correlation.tsv`, `correlation_matrix*.tsv`, `agreement.tsv`, `agreement_table.tsv`, and the recovery
+tables above.

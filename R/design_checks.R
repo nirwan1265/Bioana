@@ -55,14 +55,14 @@ bioana_check_design <- function(dir) {
   } else add("estimability", "ok", sprintf("%d fixed coefficients, all estimable", ncol(X)))
 
   # 2. residual degrees of freedom (fixed terms; random terms take more)
-  n_obs <- length(unique(.ba_unit_id(mt)))
+  n_obs <- length(unique(.ba_outcome_unit(mt, design$spec)))
   df <- n_obs - q$rank
   if (df < 1) add("residual_df", "stop", sprintf("%d experimental units for %d fixed coefficients: no residual degrees of freedom", n_obs, q$rank))
   else if (df < rules$min_residual_df) add("residual_df", "warn", sprintf("only %d residual degrees of freedom (%d units, %d coefficients)", df, n_obs, q$rank))
   else add("residual_df", "ok", sprintf("%d residual degrees of freedom", df))
 
   # 3. experimental units per treatment level
-  unit <- .ba_unit_id(mt)
+  unit <- .ba_outcome_unit(mt, design$spec)
   for (v in p$vars[p$role[p$vars] == "treatment" & !p$vars %in% p$numeric]) {
     if (!v %in% names(fr) || !is.factor(fr[[v]])) next
     n <- tapply(unit, droplevels(fr[[v]]), function(u) length(unique(u)))

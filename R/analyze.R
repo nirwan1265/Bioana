@@ -46,8 +46,13 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   man <- bioana_manifest(dir)
   # analyses the spec asks for on the sample metadata: correlation between traits, agreement between raters
   have <- vapply(man$data, function(e) e$data_type %||% "", "")
-  if (!is.null(design$spec$analysis$correlation) && !"traits" %in% have) man$data <- c(man$data, list(list(id = "correlation", data_type = "traits")))
-  if (!is.null(design$spec$analysis$agreement) && !"ratings" %in% have) man$data <- c(man$data, list(list(id = "agreement", data_type = "ratings")))
+  # their truth (Simitall: sim_truth.json secondary_traits / agreement) is the outcome entry's truth file
+  tf <- Filter(Negate(is.null), lapply(man$data, function(e) if (identical(e$data_type, "outcome")) e$truth$file))
+  tf <- if (length(tf)) tf[[1]] else if (file.exists(file.path(dir, "sim_truth.json"))) "sim_truth.json"
+  if (!is.null(design$spec$analysis$correlation) && !"traits" %in% have)
+    man$data <- c(man$data, list(list(id = "correlation", data_type = "traits", truth = if (!is.null(tf)) list(kind = "traits", file = tf, field = "secondary_traits"))))
+  if (!is.null(design$spec$analysis$agreement) && !"ratings" %in% have)
+    man$data <- c(man$data, list(list(id = "agreement", data_type = "ratings", truth = if (!is.null(tf)) list(kind = "ratings", file = tf, field = "agreement"))))
   if (!length(man$data)) {
     stop(sprintf("Nothing to analyse in %s: no data_manifest.json, an empty primary_outcome column and no counts.tsv. Fill the folder with data (simitall::simitall_from_biodes() or your measurements) and list it with bioana_write_manifest().", dir), call. = FALSE)
   }
@@ -58,6 +63,13 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   for (e in man$data) {
     if (!is.null(only) && !e$id %in% only && !e$data_type %in% only) next
     row <- tab[tab$data_type == e$data_type, , drop = FALSE]
+    ag_ <- design$spec$analysis$agreement
+    if (identical(e$data_type, "outcome") && !is.null(ag_$rater_column) && identical(ag_$score_column %||% "primary_outcome", e$column %||% "primary_outcome") &&
+        !length(design$parsed$fixed_labels) && !length(design$parsed$random) && !length(design$spec$analysis$expected_ratio)) {
+      # Biodes 0.6.7 agreement in long format: primary_outcome holds each rater's score; the analysis is agreement
+      skipped[[e$id]] <- list(data_type = e$data_type, status = "skipped", note = "the primary outcome column holds the raters' scores (analysis.agreement, long format): analysed as agreement")
+      next
+    }
     if (!nrow(row) || row$status != "ready") {
       skipped[[e$id]] <- list(data_type = e$data_type, status = if (nrow(row)) row$status else "unknown data_type",
                               note = if (nrow(row)) row$note else "not in inst/rules/analyses.tsv")
@@ -147,6 +159,11 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     } else if (a$data_type == "outcome") {
       if (!is.null(rec$coverage)) sprintf("; truth: %d/%d coefficients in their CI", rec$covered, rec$n_terms) else
         sprintf("; truth: sign %s, detected %s", rec$sign_agreement, rec$detected)
+    } else if (a$data_type == "traits") {
+      sprintf("; truth: %d/%d within-design correlations in their CI (mean %.2f vs true %.2f)", rec$covered, rec$pairs, rec$mean_estimate, rec$mean_true)
+    } else if (a$data_type == "ratings") {
+      paste0("; truth: ", paste(vapply(rec$measures, function(r) sprintf("%s %.3f vs true %.3f%s", r$measure, r$estimate, r$true,
+                                                                         if (is.na(r$covered)) "" else if (isTRUE(r$covered)) " (in CI)" else " (outside CI)"), ""), collapse = ", "))
     } else {
       paste0("; truth: ", paste(vapply(rec, function(r) sprintf("%s found %d/%d (FDR %s)", r$contrast, r$true_positives, r$true_changes, r$fdr), ""), collapse = ", "))
     }
@@ -167,14 +184,15 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     if (!is.null(a$within_design)) cat(sprintf("      %s\n", a$within_design))
 
     gr <- a$goal_recovery
-    if (!is.null(gr)) cat(sprintf("      goal truth (%s, terms %s%s): %s\n", gr$goal, paste(unlist(gr$model_terms), collapse = ", "),
+    if (!is.null(gr)) cat(sprintf("      goal truth (%s%s%s): %s\n", gr$goal, if (length(unlist(gr$model_terms))) paste0(", terms ", paste(unlist(gr$model_terms), collapse = ", ")) else "",
       if (isFALSE(gr$terms_match)) ", NOT the terms Bioana tested" else "",
       if (!isTRUE(gr$scored)) gr$note %||% "not scored" else if (!is.null(gr$tpr)) paste0(sprintf("%d/%d goal features found (tpr %.2f)", gr$found, gr$n_tested, gr$tpr),
         if (!is.null(gr$called_not_planted)) sprintf("; of %d called, %d with another planted effect,%s %d with none (%.0f%%)", gr$n_called,
           gr$called_other_planted, if (isTRUE(gr$called_hidden_factor > 0)) sprintf(" %d moved by hidden factors,", gr$called_hidden_factor) else "",
           gr$called_not_planted, 100 * gr$false_call_rate) else sprintf(", %d called outside the goal set", gr$called_outside_goal)) else
         paste0(if (isTRUE(gr$detected)) "detected" else "not detected", sprintf(" (p = %.3g)", gr$p),
-               if (!is.null(gr$covered)) sprintf(", estimate %.3g vs true %.3g, %s", gr$estimate, gr$true_effect, if (isTRUE(gr$covered)) "in CI" else "outside CI") else "",
+               if (!is.null(gr$covered) && length(gr$estimate) == 1L && length(gr$true_effect) == 1L) sprintf(", estimate %.3g vs true %.3g, %s", gr$estimate, gr$true_effect, if (isTRUE(gr$covered)) "in CI" else "outside CI") else "",
+               if (isTRUE(gr$probabilities$cells > 0)) sprintf(", class probabilities %d/%d in CI (largest difference %.3f)", gr$probabilities$covered, gr$probabilities$cells, gr$probabilities$max_abs_diff) else "",
                if (!is.null(gr$note)) paste0("; ", gr$note) else "")))
     dg <- a$diagnostics
     if (!is.null(dg)) {
@@ -238,13 +256,15 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   km <- vapply(st$km, function(r) sprintf("%s %s [%s, %s] (%d/%d events)", r$group, f(r$median), f(r$median_lcl), f(r$median_ucl), as.integer(r$events), as.integer(r$n)), "")
   cat(sprintf("      Kaplan-Meier [survival %s] median: %s\n", st$version, paste(km, collapse = "; ")))
   for (r in st$table) {
-    if (grepl("log-rank", r$statistic_name)) cat(sprintf("      %s(%g) = %.3g, p = %.3g\n", r$statistic_name, r$df1, r$statistic, r$p))
+    if (grepl("log-rank|robust score", r$statistic_name)) cat(sprintf("      %s(%g) = %.3g, p = %.3g\n", r$statistic_name, r$df1, r$statistic, r$p))
     else if (grepl("hazard ratio \\(Cox", r$statistic_name)) cat(sprintf("      Cox HR %s %.3g [%.3g, %.3g], p = %.3g\n", r$contrast, r$estimate, r$ci_low, r$ci_high, r$p))
     else if (grepl("^RMST", r$statistic_name)) cat(sprintf("      %s (%s): %s %.4g [%.4g, %.4g], p = %.3g; ratio %.3g\n", r$statistic_name, st$rmst$tau_source, r$contrast, r$estimate, r$ci_low, r$ci_high, r$p, r$effect))
     else if (grepl("time ratio", r$statistic_name)) cat(sprintf("      %s %s %.3g [%.3g, %.3g], p = %.3g\n", r$statistic_name, r$contrast, r$estimate, r$ci_low, r$ci_high, r$p))
   }
-  if (!is.null(st$cox)) cat(sprintf("      Cox: concordance %.3f, LR test p = %.3g%s\n", st$cox$concordance, st$cox$lr_test[[3]],
-    if (length(st$ph_check)) sprintf("; PH check (cox.zph) global p = %.3g", st$ph_check[[length(st$ph_check)]]$p) else ""))
+  if (!is.null(st$cox)) cat(sprintf("      Cox: %s%s\n",
+    if (!is.null(st$cox$concordance)) sprintf("concordance %.3f, LR test p = %.3g", st$cox$concordance, st$cox$lr_test[[3]])
+    else sprintf("mixed (coxme), random SD %s", paste(sprintf("%s %.3g", names(st$cox$random), sqrt(unlist(lapply(st$cox$random, `[`, 1)))), collapse = ", ")),
+    if (length(st$ph_check)) sprintf("; PH check (cox.zph%s) global p = %.3g", if (!is.null(st$ph_check[[1]]$on)) ", fixed part" else "", st$ph_check[[length(st$ph_check)]]$p) else ""))
   ph <- st$posthoc
   if (identical(ph$status, "run")) cat(sprintf("      pairwise log-rank (%s%s): %d comparisons, %d with adjusted p < 0.05\n", ph$adjust,
     if (identical(ph$type, "vs_control")) ", vs control" else "", ph$n_comparisons, ph$n_significant))

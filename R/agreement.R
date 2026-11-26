@@ -20,7 +20,9 @@
   if (scale == "continuous") {
     if (!requireNamespace("psych", quietly = TRUE)) stop("ICC needs the psych package.", call. = FALSE)
     ic <- suppressMessages(psych::ICC(as.matrix(as.data.frame(lapply(W, as.numeric))), lmer = FALSE))$results
-    for (i in seq_len(nrow(ic))) add(sprintf("%s (%s)", ic$type[i], ic$Description[i] %||% ""), ic$ICC[i], ic$`lower bound`[i], ic$`upper bound`[i], NA, ic$p[i], "icc")
+    icd <- unlist(rules$icc_forms)
+    for (i in seq_len(nrow(ic))) { ds <- icd[[ic$type[i]]] %||% gsub("_", " ", rownames(ic)[i])
+      add(if (nzchar(ds %||% "")) sprintf("%s (%s)", ic$type[i], ds) else ic$type[i], ic$ICC[i], ic$`lower bound`[i], ic$`upper bound`[i], NA, ic$p[i], "icc") }
     prim <- rules$icc_primary %||% "ICC2"
     primary <- rows[[match(prim, ic$type)]]
     notes <- c(notes, sprintf("primary form %s: %s (stat_rules: agreement_rules.json icc_primary); interpretation from the lower 95%% bound (Koo & Li 2016)", prim, rules$icc_forms[[prim]] %||% ""))
@@ -58,6 +60,13 @@
         pk <- utils::combn(k, 2, function(ij) .ba_vcd_kappa(table(F_[[ij[1]]], F_[[ij[2]]]), "Equal-Spacing")$u[1])
         add(sprintf("Light's kappa (mean of %d pairwise Cohen's kappas)", length(pk)), mean(pk))
       }
+      if (scale == "ordinal") {
+        # 3+ raters on an ordinal scale: mean of the pairwise weighted kappas (vcd), the multi-rater analogue of Cohen's weighted kappa
+        wts <- c(linear = "Equal-Spacing", quadratic = "Fleiss-Cohen")
+        for (wn in names(wts))
+          add(sprintf("mean pairwise weighted kappa (%s, %d pairs)", wn, choose(k, 2)),
+              mean(utils::combn(k, 2, function(ij) .ba_vcd_kappa(table(F_[[ij[1]]], F_[[ij[2]]]), wts[[wn]])$w[1])))
+      }
       primary <- rows[[1]]
     }
   }
@@ -69,6 +78,12 @@
   summary <- list(data_type = "ratings", scale = scale, raters = as.list(names(W)), n_units = nrow(W), package = pk_, version = as.character(utils::packageVersion(pk_)),
                   primary = as.list(primary), measures = lapply(seq_len(nrow(tab)), function(i) as.list(tab[i, ])),
                   reference = rules$reference, tutorial = "docs/engines/correlation_agreement.md", warnings = notes)
+  if (!is.null(entry$truth$file)) {
+    tr <- tryCatch(jsonlite::read_json(file.path(design$dir, entry$truth$file)), error = function(e) NULL)
+    at <- tr[[entry$truth$field %||% "agreement"]]
+    if (!is.null(at)) { rec <- .ba_agreement_recovery(tab, at); if (!is.null(rec)) { summary$recovery <- rec
+      paths <- c(paths, agreement_recovery = .ba_write_tsv(do.call(rbind, lapply(rec$measures, as.data.frame)), file.path(outdir, "agreement_recovery.tsv"))) } }
+  }
   list(summary = summary, paths = paths, results = tab)
 }
 
@@ -108,4 +123,23 @@
   b <- if (which == "icc") rules$icc_scale else rules$kappa_scale
   if (is.null(b) || !is.finite(x)) return(NA_character_)
   as.character(cut(x, c(-Inf, unlist(b$breaks), Inf), unlist(b$labels), right = FALSE))
+}
+
+# Simitall's agreement truth: continuous icc2 / icc3 (from the planted variances) against psych's ICC2 / ICC3 and
+# their intervals; categorical expected_kappa (any pair of raters) against Cohen's kappa (2 raters, with its CI) or
+# Fleiss' and Light's kappa (3+, no interval), expected_weighted_kappa_quadratic against the quadratic weighted kappa.
+.ba_agreement_recovery <- function(tab, at) {
+  pick <- function(pat, true, measure_name = NULL) {
+    i <- grep(pat, tab$measure)[1]
+    if (is.na(i) || is.null(true)) return(NULL)
+    lo <- tab$ci_low[i]; hi <- tab$ci_high[i]; tv <- as.numeric(true)
+    list(measure = tab$measure[i], estimate = tab$estimate[i], true = tv, ci_low = lo, ci_high = hi,
+         covered = if (is.na(lo) || is.na(hi)) NA else tv >= lo && tv <= hi)
+  }
+  m <- if (identical(at$scale, "continuous")) list(pick("^ICC2 ", at$icc2), pick("^ICC3 ", at$icc3)) else
+    list(pick("^Cohen's kappa \\(unweighted\\)", at$expected_kappa), pick("^Fleiss' kappa \\(", at$expected_kappa), pick("^Light's kappa", at$expected_kappa),
+         pick("^weighted kappa \\(quadratic", at$expected_weighted_kappa_quadratic), pick("^mean pairwise weighted kappa \\(quadratic", at$expected_weighted_kappa_quadratic))
+  m <- Filter(Negate(is.null), m)
+  if (!length(m)) return(NULL)
+  list(measures = m, note = at$note)
 }
