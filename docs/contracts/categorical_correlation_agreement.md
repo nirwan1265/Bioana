@@ -40,6 +40,9 @@ Bioana 0.11.0. Nothing here blocks: Bioana picks the test from the design and th
   `score_column` = the outcome column) the outcome entry is skipped: the column holds the scores.
 - Binary with two `primary_outcome.categories` (or `expected_ratio` labels): text values coded
   0 = the first category (reference), 1 = the second; 0/1 values are read that way for the goodness of fit.
+- Biodes 0e5dcc9: an outcome tested against `expected_ratio` is nominal (two classes too), categories in ratio order.
+  `secondary_outcomes[].type` sets each pair's method when the method is unstated (Pearson for continuous,
+  Spearman when a count or ordinal trait is involved; `correlation_rules.json method_by_type`).
 - `analysis.correlation.variables`: trait names. `primary_outcome.name` -> column `primary_outcome`,
   `secondary_outcomes[{name, column}]` -> their columns (names are matched case- and punctuation-free).
 - Survival with one row per subsample: the unit is `analysis.survival.cluster` (or `plot` when there is a

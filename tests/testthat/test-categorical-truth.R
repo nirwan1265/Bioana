@@ -142,3 +142,18 @@ test_that("survival, one template row per seed (Biodes subsample column, analysi
   rs <- utils::tail(Filter(function(x) grepl("robust score", x$statistic_name), a$stat_test$table), 1)[[1]]
   expect_equal(rs$statistic, unname(summary(rc)$robscore["test"]), tolerance = 1e-6)
 })
+
+test_that("correlation method per trait type when unstated (Biodes 0e5dcc9): count or ordinal pairs Spearman, continuous pairs Pearson; a stated method applies to all", {
+  set.seed(7); n <- 80
+  m <- data.frame(plot = 1:n, sample_id = paste0("S", 1:n), stringsAsFactors = FALSE)
+  m$primary_outcome <- stats::rnorm(n, 50, 5); m$leaf_area <- m$primary_outcome + stats::rnorm(n, 0, 5); m$tillers <- stats::rpois(n, exp(1 + 0.02 * m$primary_outcome))
+  spec <- list(factors = list(), design = list(chosen = "single_group"), primary_outcome = list(name = "height", type = "continuous"),
+               secondary_outcomes = list(list(name = "leaf_area", column = "leaf_area", type = "continuous"), list(name = "tillers", column = "tillers", type = "count")),
+               assumptions = list(analysis.correlation.method = "not stated: pearson"),
+               analysis = list(model = "y ~ 1", goals = list(), correlation = list(variables = list("height", "leaf_area", "tillers"), method = "pearson")))
+  r <- run(cat_dir(m, spec, NULL), only = "correlation"); tb <- r$results$correlation
+  expect_equal(tb$method, c("pearson", "spearman", "spearman"))
+  expect_equal(tb$r[2], unname(suppressWarnings(stats::cor.test(m$primary_outcome, m$tillers, method = "spearman"))$estimate))
+  spec$assumptions <- NULL
+  r <- run(cat_dir(m, spec, NULL), only = "correlation"); expect_true(all(r$results$correlation$method == "pearson"))
+})

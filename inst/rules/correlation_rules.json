@@ -4,8 +4,26 @@
   "adjust": "holm",
   "within_design": true,
   "_note_within_design": "also correlate the residuals of each trait on the design's fixed part (treatments, blocks): across plots, traits that both respond to a treatment correlate even with no relation within a treatment.",
-  "strength_breaks": [0, 0.1, 0.3, 0.5, 1.01],
-  "strength_labels": ["negligible", "weak", "moderate", "strong"],
+  "strength_breaks": [
+    0,
+    0.1,
+    0.3,
+    0.5,
+    1.01
+  ],
+  "strength_labels": [
+    "negligible",
+    "weak",
+    "moderate",
+    "strong"
+  ],
   "_note_strength": "rough guide (Cohen 1988); field-dependent; judge by the coefficient and its CI, not the p-value.",
-  "reference": "Pearson 1895; Spearman 1904 Am J Psychol 15:72; Kendall 1938 Biometrika 30:81; Holm 1979; R Core stats::cor.test"
+  "reference": "Pearson 1895; Spearman 1904 Am J Psychol 15:72; Kendall 1938 Biometrika 30:81; Holm 1979; R Core stats::cor.test",
+  "method_by_type": {
+    "continuous": "pearson",
+    "binary": "pearson",
+    "count": "spearman",
+    "ordinal": "spearman"
+  },
+  "_note_method_by_type": "when Biodes did not state the method (no analysis.correlation.method, or assumptions[\"analysis.correlation.method\"] set), each pair uses Pearson only if both traits are continuous (or 0/1: point-biserial) and Spearman if either is a count or ordinal (primary_outcome.type, secondary_outcomes[].type; Biodes 0e5dcc9). A stated method applies to every pair."
 }

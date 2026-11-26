@@ -22,18 +22,27 @@
   adj <- cs$adjust %||% rules$adjust %||% "holm"
   X <- as.data.frame(lapply(dat[vars], function(z) suppressWarnings(as.numeric(z))))
   notes <- character()
-  one <- function(x, y) if (robust_m) {
+  # per-trait type (Biodes 0e5dcc9: primary_outcome.type, secondary_outcomes[].type) -> per-pair method when unstated
+  stated <- !is.null(cs$method) && is.null(method_assumed)
+  ty <- .ba_trait_types(vars, design$spec)
+  pair_method <- function(a, b) {
+    if (stated || robust_m) return(method)
+    mb <- unlist(rules$method_by_type %||% list(continuous = "pearson", count = "spearman", ordinal = "spearman", binary = "pearson"))
+    m <- unique(c(mb[[ty[[a]]]] %||% method, mb[[ty[[b]]]] %||% method))
+    if ("spearman" %in% m) "spearman" else m[1]
+  }
+  one <- function(x, y, m) if (robust_m) {
     # WRS2 (Wilcox): percentage-bend (beta = 0.2) or 20% winsorized correlation, t test on n - 2 df
     r <- if (method == "percentage_bend") WRS2::pbcor(x, y, beta = rules$pb_beta %||% 0.2) else WRS2::wincor(x, y, tr = rules$win_trim %||% 0.2)
     list(estimate = r$cor, statistic = r$test, parameter = length(x) - 2, p.value = r$p.value, conf.int = NULL)
-  } else withCallingHandlers(stats::cor.test(x, y, method = method),
+  } else withCallingHandlers(stats::cor.test(x, y, method = m),
     warning = function(w) { if (grepl("ties|exact", conditionMessage(w))) { notes <<- unique(c(notes, "ties: normal approximation for the rank correlation p-value")); invokeRestart("muffleWarning") } })
   pairs <- utils::combn(vars, 2, simplify = FALSE)
   long <- function(Z, scope) {
     out <- do.call(rbind, lapply(pairs, function(pr) {
       ok <- stats::complete.cases(Z[pr]); x <- Z[[pr[1]]][ok]; y <- Z[[pr[2]]][ok]
-      ct <- one(x, y)
-      data.frame(var1 = pr[1], var2 = pr[2], scope = scope, method = method, r = unname(ct$estimate), statistic = unname(ct$statistic),
+      pm <- pair_method(pr[1], pr[2]); ct <- one(x, y, pm)
+      data.frame(var1 = pr[1], var2 = pr[2], scope = scope, method = pm, r = unname(ct$estimate), statistic = unname(ct$statistic),
                  df = if (!is.null(ct$parameter)) unname(ct$parameter) else NA_real_, p = ct$p.value,
                  ci_low = if (!is.null(ct$conf.int)) ct$conf.int[1] else NA_real_, ci_high = if (!is.null(ct$conf.int)) ct$conf.int[2] else NA_real_,
                  n = sum(ok), stringsAsFactors = FALSE)
@@ -73,7 +82,9 @@
   if (any(tab$scope == "within design")) paths <- c(paths, correlation_matrix_within = .ba_write_tsv(mat("within design"), file.path(outdir, "correlation_matrix_within.tsv")))
   raw <- tab[tab$scope == "raw", ]
   pk_ <- if (robust_m) "WRS2" else "stats"
-  summary <- list(data_type = "traits", method = method, method_assumed = method_assumed, package = pk_, version = as.character(utils::packageVersion(pk_)),
+  used <- unique(tab$method)
+  summary <- list(data_type = "traits", method = paste(used, collapse = " / "), method_by_pair = length(used) > 1 || !identical(used, method),
+                  trait_types = as.list(ty), method_assumed = method_assumed, package = pk_, version = as.character(utils::packageVersion(pk_)),
                   call = if (robust_m) sprintf("WRS2::%s per pair; p.adjust('%s')", if (method == "percentage_bend") "pbcor(x, y, beta = 0.2)" else "wincor(x, y, tr = 0.2)", adj) else sprintf("stats::cor.test(x, y, method = '%s') per pair; p.adjust('%s')", method, adj), variables = as.list(unname(vars)), trait_names = as.list(stats::setNames(names(vars) %||% vars, vars)),
                   n_pairs = nrow(raw), n_significant = sum(raw$p_adj < alpha), within_design = res_note,
                   strongest = if (nrow(raw)) { i <- which.max(abs(raw$r)); list(var1 = raw$var1[i], var2 = raw$var2[i], r = raw$r[i], p_adj = raw$p_adj[i]) },
@@ -91,6 +102,17 @@
 
 # Trait names -> table columns: a column of that name; primary_outcome.name -> primary_outcome.column or
 # "primary_outcome"; secondary_outcomes name -> column. The returned vector is named by the trait name.
+# Trait type per column (primary_outcome.type for the primary column, secondary_outcomes[].type by column or
+# name; default continuous).
+.ba_trait_types <- function(vars, spec) {
+  pc <- spec$primary_outcome$column %||% "primary_outcome"
+  sec <- spec$secondary_outcomes %||% list()
+  stats::setNames(vapply(unname(vars), function(v) {
+    if (identical(v, pc)) return(spec$primary_outcome$type %||% "continuous")
+    hit <- Filter(function(s) identical(s$column %||% s$name, v) || identical(s$name, v), sec)
+    if (length(hit)) hit[[1]]$type %||% "continuous" else "continuous" }, ""), unname(vars))
+}
+
 .ba_trait_columns <- function(vars, spec, cols) {
   map <- c(stats::setNames(spec$primary_outcome$column %||% "primary_outcome", spec$primary_outcome$name %||% "primary_outcome"),
            unlist(lapply(spec$secondary_outcomes %||% list(), function(s) if (!is.null(s$name)) stats::setNames(s$column %||% s$name, s$name))))

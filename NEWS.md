@@ -1,3 +1,10 @@
+# bioana 0.13.1
+
+- Biodes 0e5dcc9: when the correlation method is not stated, each pair's method follows the traits' types
+  (`primary_outcome.type`, `secondary_outcomes[].type`): Pearson for continuous (or 0/1) pairs, Spearman when either
+  trait is a count or ordinal (`correlation_rules.json method_by_type`). A stated method applies to every pair.
+  Outcomes tested against `expected_ratio` are nominal even with two classes (already read).
+
 # bioana 0.13.0
 
 Regression, robust tests and power (datanovia regression, power and robust pages; docs/contracts/regression.md):
