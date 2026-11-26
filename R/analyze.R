@@ -153,8 +153,9 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     if (!is.null(gr)) cat(sprintf("      goal truth (%s, terms %s%s): %s\n", gr$goal, paste(unlist(gr$model_terms), collapse = ", "),
       if (isFALSE(gr$terms_match)) ", NOT the terms Bioana tested" else "",
       if (!isTRUE(gr$scored)) gr$note %||% "not scored" else if (!is.null(gr$tpr)) paste0(sprintf("%d/%d goal features found (tpr %.2f)", gr$found, gr$n_tested, gr$tpr),
-        if (!is.null(gr$called_not_planted)) sprintf("; of %d called, %d with another planted effect, %d with none (%.0f%%)", gr$n_called,
-          gr$called_other_planted, gr$called_not_planted, 100 * gr$false_call_rate) else sprintf(", %d called outside the goal set", gr$called_outside_goal)) else
+        if (!is.null(gr$called_not_planted)) sprintf("; of %d called, %d with another planted effect,%s %d with none (%.0f%%)", gr$n_called,
+          gr$called_other_planted, if (isTRUE(gr$called_hidden_factor > 0)) sprintf(" %d moved by hidden factors,", gr$called_hidden_factor) else "",
+          gr$called_not_planted, 100 * gr$false_call_rate) else sprintf(", %d called outside the goal set", gr$called_outside_goal)) else
         paste0(if (isTRUE(gr$detected)) "detected" else "not detected", sprintf(" (p = %.3g)", gr$p),
                if (!is.null(gr$covered)) sprintf(", estimate %.3g vs true %.3g, %s", gr$estimate, gr$true_effect, if (isTRUE(gr$covered)) "in CI" else "outside CI") else "",
                if (!is.null(gr$note)) paste0("; ", gr$note) else "")))

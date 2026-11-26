@@ -245,7 +245,7 @@ test_that("goal recovery for count features: share of Simitall's goal genes foun
   gr <- a$goal_recovery
   expect_true(gr$terms_match); expect_equal(gr$n_goal_features, 20)
   expect_gt(gr$tpr, 0.8); expect_lt(gr$called_outside_goal, 10)
-  expect_equal(gr$called_other_planted + gr$called_not_planted, gr$called_outside_goal)
+  expect_equal(gr$called_other_planted + gr$called_hidden_factor + gr$called_not_planted, gr$called_outside_goal)
   # the reference level is mutant, so DESeq2's LRT drops the time columns of mutant
   cd <- data.frame(treatment = factor(w$grid$genotype, levels = c("mutant", "wt")), time = factor(w$grid$time, levels = c("0", "6", "24")))
   X <- stats::model.matrix(~ treatment * time, cd)
@@ -302,4 +302,40 @@ test_that("a model with no fixed terms (p-rep catalog: y ~ (1 | entry)) runs", {
   expect_no_error(bioana_check_design(d))
   utils::capture.output(r <- bioana_analyze(d, secondary = FALSE))
   expect_equal(r$summary$analyses$outcome$engine$engine, "lmer")
+})
+
+test_that("unplanted calls driven by Simitall hidden factors are reported apart from called_not_planted", {
+  skip_if_not_installed("DESeq2")
+  d <- file.path(tempfile("hidden_"), "design"); dir.create(file.path(d, "truth"), recursive = TRUE); dir.create(file.path(d, "rnaseq"))
+  grid <- data.frame(sample_id = sprintf("S%02d", 1:12), trt = rep(c("ctrl", "trt"), each = 6), stringsAsFactors = FALSE)
+  G <- 1000; set.seed(8)
+  score <- (grid$trt == "trt") * 1.2 + stats::rnorm(12, 0, 0.3)          # hidden factor confounded with treatment
+  load <- c(rep(0, 20), rep(1.2, 40), rep(0, G - 60))                     # genes 21-60 load on it
+  eff <- c(rep(2, 20), rep(0, G - 20))                                    # planted goal genes 1-20
+  mu <- 2^stats::rnorm(G, 7, 1)
+  cnt <- sapply(1:12, function(j) stats::rnbinom(G, mu = mu * 2^(eff * (grid$trt[j] == "trt") + load * score[j]), size = 30))
+  dimnames(cnt) <- list(sprintf("g%03d", 1:G), grid$sample_id)
+  write_mat(cnt, file.path(d, "counts.tsv"))
+  utils::write.table(data.frame(sample_id = grid$sample_id, latent_1 = score), file.path(d, "rnaseq", "latent_scores.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  utils::write.table(data.frame(gene_id = rownames(cnt), latent_1 = load), file.path(d, "rnaseq", "latent_loadings.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  utils::write.table(data.frame(feature_id = sprintf("g%03d", 1:20), term = "treatment", effect = 2, change = 2), file.path(d, "truth", "rna_goal.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  utils::write.table(data.frame(feature_id = sprintf("g%03d", 1:20), condition = "trt", effect = 2), file.path(d, "truth", "rna.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  jsonlite::write_json(list(goal_truth = list(goal = "treatment_effect", model_terms = list("treatment"), status = "planted"),
+                            counts = list(hidden_factors = list(n_latent = 1, scores = "rnaseq/latent_scores.tsv", loadings = "rnaseq/latent_loadings.tsv"))),
+                       file.path(d, "sim_truth.json"), auto_unbox = TRUE, pretty = TRUE)
+  spec <- list(handoff_version = "0.6.4", origin = "planned", organism = "test", system = "lab",
+               factors = list(list(name = "trt", n_levels = 2L, levels = list("ctrl", "trt"))), design = list(chosen = "crd", reps = 6L),
+               assays = "rnaseq", analysis = list(model = "y ~ treatment", terms = list(treatment = "trt", layout_columns = list("trt"))))
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(grid, file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(grid, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  bioana_write_manifest(d, list(id = "rnaseq", data_type = "feature_counts", assay = "rnaseq", files = list(counts = "counts.tsv"),
+    truth = list(kind = "features", file = "truth/rna.tsv", term = "treatment", large = 1,
+                 goal = list(goal = "treatment_effect", file = "truth/rna_goal.tsv", term = "treatment", effect_scale = "log2 fold change"))))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE))
+  gr <- r$summary$analyses$rnaseq$goal_recovery
+  expect_gt(gr$tpr, 0.9)
+  expect_gte(gr$called_hidden_factor, 30)
+  expect_lte(gr$called_not_planted, 0.1 * gr$n_called)
+  expect_equal(gr$called_other_planted + gr$called_hidden_factor + gr$called_not_planted, gr$called_outside_goal)
 })

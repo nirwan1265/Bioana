@@ -1,3 +1,10 @@
+# bioana 0.7.5
+
+- Simitall hidden factors (`sim_truth.json` `counts.hidden_factors`, or under `assays.<assay>`): unplanted calls
+  whose hidden part (loadings x scores, fitted with Bioana's design model) moves them along the tested effect are
+  reported as `called_hidden_factor`, apart from `called_not_planted`. Rule in `goal_rules.json`.
+- Checked with Simitall 399c1ff (hidden factors off by default): dose design, 7 of 109 DESeq2 calls unplanted (6%).
+
 # bioana 0.7.4
 
 - Trend goals on simulated data: the per-level truth check is skipped (it crashed on a numeric term:

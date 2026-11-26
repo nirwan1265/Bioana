@@ -21,7 +21,7 @@
   paths <- c(results = .ba_write_tsv(ft$table, file.path(outdir, "results.tsv")))
   truth <- .ba_entry_truth(entry, design$dir)
   if (!is.null(entry$truth$goal) && !is.null(ft$summary$goal)) {
-    ft$summary$goal_recovery <- .ba_goal_recovery_features(entry, design$dir, ft$summary$goal, ft$table, alpha)
+    ft$summary$goal_recovery <- .ba_goal_recovery_features(entry, design$dir, ft$summary$goal, ft$table, alpha, ft$goal_design)
   }
   if (!is.null(truth) && (identical(ft$summary$goal$test, "lrt") || identical(ft$summary$goal$id, "trend"))) {
     # the condition contrasts are not in a joint test or a trend (numeric) model; the goal is scored by goal_recovery

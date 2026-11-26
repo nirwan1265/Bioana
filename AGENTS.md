@@ -151,7 +151,10 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
   (checked at 279be4b: x = 0, 0.301, 1.041, 2.004, predictor_match TRUE).
 - Open with Simitall: `simulate_rnaseq_experiment` defaults `n_latent = 2`, `latent_effect_sd = 0.2`,
   not in `simulator_parameters.tsv` nor in `sim_truth.json`. In a 16-sample dose design they made
-  132 of 237 DESeq2 calls genes with no planted effect (7 with `n_latent = 0`).
+  132 of 237 DESeq2 calls genes with no planted effect (7 with `n_latent = 0`). Simitall 399c1ff:
+  off by default; when on, scores/loadings files are recorded at `counts.hidden_factors` (top level
+  of sim_truth.json, not under `assays.<assay>`; Bioana reads both). With n_latent = 2 Bioana attributes
+  125 of those 132 to the hidden factors (share 0.25); 7 remain, as with n_latent = 0.
 
 ## Packages
 

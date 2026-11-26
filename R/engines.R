@@ -241,7 +241,7 @@ bioana_engine_plan <- function(data_type, design = c("fixed", "random")) {
   r$summary$goal <- .ba_goal_summary(goal, d0$plan)
   if (!is.null(r$summary$goal$effect)) r$summary$goal$effect$scale_used <- r$summary$engine$estimate_scale
   r$summary$secondary_engine <- .ba_secondary_engine(ch$chain, eng)
-  list(table = r$table, warnings = warn, summary = r$summary)
+  list(table = r$table, warnings = warn, summary = r$summary, goal_design = list(ids = d0$ids, X = d0$X))
 }
 
 # Agreement between the primary and secondary results of one data set.

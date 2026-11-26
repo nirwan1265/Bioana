@@ -226,6 +226,33 @@ bioana_goals <- function() {
   out
 }
 
+# Simitall hidden factors for one assay: scores (units x factors) and loadings (features x factors).
+.ba_hidden_factors <- function(dir, id) {
+  st <- file.path(dir, "sim_truth.json")
+  if (!file.exists(st)) return(NULL)
+  t <- tryCatch(jsonlite::read_json(st, simplifyVector = FALSE), error = function(e) NULL)
+  hf <- t$assays[[id]]$counts$hidden_factors %||% t$assays[[paste0("assay_", id)]]$counts$hidden_factors %||% t$counts$hidden_factors
+  if (is.null(hf$scores) || is.null(hf$loadings)) return(NULL)
+  rd <- function(f) { f <- file.path(dir, f); if (!file.exists(f)) return(NULL)
+    x <- utils::read.delim(f, check.names = FALSE, stringsAsFactors = FALSE); m <- as.matrix(x[, -1, drop = FALSE]); rownames(m) <- x[[1]]; m }
+  S <- rd(hf$scores); L <- rd(hf$loadings)
+  if (is.null(S) || is.null(L)) return(NULL)
+  k <- intersect(colnames(S), colnames(L))
+  list(S = S[, k, drop = FALSE], L = L[, k, drop = FALSE])
+}
+
+# The design model fitted to each feature's hidden part (L %*% t(S)): coefficients x features (log2).
+.ba_hidden_goal_effect <- function(hf, gd, cols) {
+  ids <- gd$ids
+  if (!all(ids %in% rownames(hf$S))) return(NULL)
+  C <- hf$L %*% t(hf$S[ids, , drop = FALSE])
+  X <- gd$X
+  B <- qr.coef(qr(X), t(C))
+  B[is.na(B)] <- 0
+  if (!length(intersect(cols, rownames(B)))) return(NULL)
+  B
+}
+
 # Outcome: the goal test detects the planted effect (detected), and a one-coefficient goal's estimate
 # against true_effect (continuous outcomes: bias and CI coverage; other types: sign).
 .ba_goal_recovery_outcome <- function(gt, g, res, alpha, type) {
@@ -250,7 +277,7 @@ bioana_goals <- function() {
 
 # Features: share of Simitall's goal features (truth.goal file: feature_id, term, effect, change) that
 # the goal test finds (tpr); one-coefficient goals also compare estimates with the planted effects.
-.ba_goal_recovery_features <- function(entry, dir, g, table, alpha) {
+.ba_goal_recovery_features <- function(entry, dir, g, table, alpha, gd = NULL) {
   tg <- entry$truth$goal
   f <- file.path(dir, tg$file %||% "")
   if (is.null(tg$file) || !file.exists(f)) return(list(goal = tg$goal, scored = FALSE, note = "truth.goal file missing: not scored"))
@@ -273,13 +300,38 @@ bioana_goals <- function() {
     other <- setdiff(unique(utils::read.delim(of, stringsAsFactors = FALSE)$feature_id), goal_ids)
     out$called_other_planted <- sum(sig[intersect(names(sig), other)])
     out$called_not_planted <- sum(sig[setdiff(names(sig), c(goal_ids, other))])
+    out$called_hidden_factor <- 0L
+    hf <- .ba_hidden_factors(dir, entry$id)
+    np <- setdiff(names(sig)[sig], c(goal_ids, other))
+    if (!is.null(hf) && !is.null(gd) && length(np)) {
+      gr <- .ba_rules("goal_rules")
+      cols <- unlist(g$coefficients)
+      B <- .ba_hidden_goal_effect(hf, gd, cols)
+      if (!is.null(B)) {
+        np <- intersect(np, colnames(B))
+        if (identical(g$test, "wald") && length(cols) == 1L) {
+          est <- rows$estimate[match(np, rows$feature_id)]; hb <- B[cols, np]
+          hit <- np[!is.na(est) & sign(hb) == sign(est) & abs(hb) >= (gr$hidden_factor_share %||% 0.5) * abs(est)]
+          out$hidden_factor_rule <- sprintf("hidden-factor effect on %s has the estimate's sign and >= %g of its size", cols, gr$hidden_factor_share %||% 0.5)
+        } else {
+          big <- apply(abs(B[intersect(cols, rownames(B)), np, drop = FALSE]), 2, max)
+          hit <- np[big >= (gr$hidden_factor_effect_large %||% 0.25)]
+          out$hidden_factor_rule <- sprintf("largest hidden-factor effect on the tested coefficients >= %g log2", gr$hidden_factor_effect_large %||% 0.25)
+        }
+        out$called_hidden_factor <- length(hit)
+        out$called_not_planted <- out$called_not_planted - length(hit)
+      }
+    }
     out$false_call_rate <- if (out$n_called) out$called_not_planted / out$n_called else 0
   }
   out$effect_scale <- tg$effect_scale
   if (identical(g$test, "wald") && length(unlist(g$coefficients)) == 1L && !isFALSE(out$predictor_match) && "effect" %in% names(tf)) {
     m <- rows[match(tested, rows$feature_id), , drop = FALSE]; e <- tf$effect[match(tested, tf$feature_id)]
     ok <- !is.na(m$estimate) & !is.na(e)
-    if (sum(ok) >= 3) { out$estimate_cor <- stats::cor(m$estimate[ok], e[ok]); out$sign_agreement <- mean(sign(m$estimate[ok]) == sign(e[ok])) }
+    if (sum(ok) >= 3) {
+      if (stats::sd(e[ok]) > 0 && stats::sd(m$estimate[ok]) > 0) out$estimate_cor <- stats::cor(m$estimate[ok], e[ok])
+      out$sign_agreement <- mean(sign(m$estimate[ok]) == sign(e[ok]))
+    }
   }
   out
 }

@@ -129,8 +129,10 @@ Keyed to each data set's manifest `truth.goal` and `sim_truth.json` `goal_truth`
   `covered` (continuous) or `sign_agreement`.
 - features (`truth.goal.file`: feature_id, term, effect, change): `tpr` (share of goal features
   found by the goal test), `found`, `n_goal_features`, `n_tested`, `n_called`,
-  `called_outside_goal` = `called_other_planted` (in `truth.file`) + `called_not_planted`,
-  `false_call_rate`; trend also `estimate_cor`, `sign_agreement`.
+  `called_outside_goal` = `called_other_planted` (in `truth.file`) + `called_hidden_factor`
+  (moved by Simitall's hidden factors along the tested effect: `goal_rules.json`
+  `hidden_factor_share` / `hidden_factor_effect_large`) + `called_not_planted`,
+  `false_call_rate` (= `called_not_planted` / `n_called`); trend also `estimate_cor`, `sign_agreement`.
 
 ## 5. For Simitall
 

@@ -6,5 +6,9 @@
   "effect_scale_outcome": "the model scale of the engine",
   "_note_effect_scale_outcome": "goal_effect.scale = 'outcome' is read as the scale the engine estimates on (engines.tsv estimate_scale): outcome units for continuous outcomes, log2 fold change for counts, log odds for binary, M-value for methylation.",
   "within_group_level_match": "case-insensitive exact, then a unique partial match",
-  "_note_within_group": "time_course with goal_effect.time_course.scope = 'within_group', group and group_factor: group becomes the reference level of group_factor and the time main-effect coefficients are tested jointly (time within that group). Without a group:time interaction in the model, or a group Bioana cannot find, time is tested over all groups and the report says so."
+  "_note_within_group": "time_course with goal_effect.time_course.scope = 'within_group', group and group_factor: group becomes the reference level of group_factor and the time main-effect coefficients are tested jointly (time within that group). Without a group:time interaction in the model, or a group Bioana cannot find, time is tested over all groups and the report says so.",
+  "hidden_factor_share": 0.25,
+  "hidden_factor_effect_large": 0.25,
+  "_note_hidden_factors": "Simitall hidden factors (sim_truth.json counts.hidden_factors: scores per unit, loadings per gene). Bioana fits its design model to each gene's hidden part (loadings %*% scores) and takes the goal's coefficient(s): the hidden-factor effect on what the goal tests (log2). An unplanted call is attributed to hidden factors when, for a one-coefficient goal, that effect has the estimate's sign and at least hidden_factor_share of its size; for joint tests, when its largest coefficient is at least hidden_factor_effect_large.",
+  "_note_hidden_factor_share": "0.25: called genes carry noise on top of the hidden effect (selected for size), so the hidden share of an estimate is below 1 even when hidden factors caused the call. Checked on Simitall 399c1ff dose design: 123/132 unplanted calls had share >= 0.3, 4 had < 0.1."
 }
