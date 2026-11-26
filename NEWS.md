@@ -1,3 +1,12 @@
+# bioana 0.10.1
+
+- Survival goal truth on one scale: hazard-ratio truth (Simitall weibull_ph, `true_log_hazard_ratio`) vs the Cox
+  coefficient on the log scale, reported as HRs; time-ratio truth vs survreg of the truth's family.
+- Survival subsamples (seeds on a tray, `unit_id`): no averaging of censored times; the unit is a shared frailty
+  `(1 | unit)` and the robust (Lin-Wei) score test from `coxph(... + cluster(unit))` is the primary test.
+- Observed events against Biodes `power.events_required`.
+- Checked with Biodes 0.6.6 (4b0d869) and Simitall 3f82312 / 6299c01.
+
 # bioana 0.10.0
 
 - Survival analysis next to the Cox engine (`R/survival_tests.R`, `survival_rules.json`): Kaplan-Meier medians,

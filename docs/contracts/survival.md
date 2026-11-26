@@ -31,6 +31,14 @@ Bioana 0.10.0 runs a full survival analysis for `primary_outcome.type = "surviva
 6. Goal: the registry's `survival` goal. Please say in `goal_effect.survival` which estimand the
    size is on: `scale = "hazard_ratio"` or `"time_ratio"` (or `"rmst_difference"` with `tau`).
 
+## Read since (Bioana 0.10.1)
+
+- Biodes 0.6.6: all fields above. Subsamples in a unit (seeds on a tray: `subsamples_per_unit` > 1,
+  `unit_id` column): Bioana keeps every seed, makes the unit a shared frailty and uses the robust
+  (Lin-Wei) score test as the primary test; Biodes need not write a frailty term for it.
+- Simitall 3f82312: hazard-ratio truth is compared with the Cox coefficient on the log scale
+  (`true_log_hazard_ratio`), time-ratio truth with survreg of `outcome_model.family`.
+
 ## Simitall
 
 1. Survival is now log-normal AFT only (hazards not proportional). Bioana scores that goal truth

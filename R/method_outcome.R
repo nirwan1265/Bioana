@@ -40,7 +40,13 @@
   }
   dat <- meta[!is.na(y), , drop = FALSE]
   dcell <- cell[!is.na(y)]
-  if (has_subs && (subsamples == "aggregate" || type != "continuous")) {
+  if (has_subs && type == "survival") {
+    # subsamples of a survival outcome (seeds on a tray): averaging censored times is wrong; every subsample is
+    # kept and the unit is a cluster (shared frailty below, robust score test in survival_tests.R)
+    if (subsamples != "nest") warn <- c(warn, sprintf("survival subsamples are not averaged: %d units kept as clusters of their subsamples (shared frailty)", length(unique(unit))))
+    subsamples <- "nest"
+  }
+  if (has_subs && type != "survival" && (subsamples == "aggregate" || type != "continuous")) {
     if (type != "continuous" && subsamples == "nest") warn <- c(warn, "subsamples averaged per unit: nesting is fitted for continuous outcomes only")
     first <- dat[!duplicated(dcell), , drop = FALSE]
     first$y_ <- as.numeric(tapply(dat$y_, dcell, mean)[dcell[!duplicated(dcell)]])
@@ -48,7 +54,7 @@
     dat <- first
   }
   f <- p$formula; f[[2]] <- as.name("y_")
-  if (has_subs && subsamples == "nest" && type == "continuous") {
+  if (has_subs && subsamples == "nest" && type %in% c("continuous", "survival")) {
     dat$unit_id_ <- dcell
     f <- stats::update(f, . ~ . + (1 | unit_id_))
   }

@@ -5,6 +5,7 @@ strata <- survival::strata   # the strata() special in survdiff formulas below
 surv_run <- function(d, args = NULL) { utils::capture.output(r <- bioana_analyze(d, secondary = FALSE, params = if (!is.null(args)) list(outcome = args)))
   r$summary$analyses$outcome$stat_test }
 trow <- function(st, pat) Filter(function(r) grepl(pat, r$statistic_name), st$table)
+cluster <- survival::cluster   # the cluster() special in coxph formulas below
 lung_df <- function() { e <- new.env(); utils::data("cancer", package = "survival", envir = e); x <- e$lung
   x$sex <- factor(c("male", "female")[x$sex], c("male", "female")); x }
 
@@ -136,4 +137,49 @@ test_that("goal truth as a time ratio (Simitall lognormal AFT) is scored with su
   sr <- survival::survreg(survival::Surv(time, event) ~ trt, data = m, dist = "lognormal")
   expect_equal(gr$estimate, unname(exp(stats::coef(sr)[2])), tolerance = 1e-6)
   expect_true(gr$sign_agreement); expect_match(gr$scale, "survreg\\(dist = 'lognormal'\\)")
+})
+
+seed_folder <- function(trays = 24, seeds = 10, hr = 0.6, theta = 0.5, power = NULL, truth = TRUE, seed = 5) {
+  d <- file.path(tempfile("seeds_"), "design"); dir.create(d, recursive = TRUE)
+  set.seed(seed)
+  tr <- data.frame(unit = sprintf("T%02d", seq_len(trays)), lot = rep(c("untreated", "primed"), length.out = trays), stringsAsFactors = FALSE)
+  fr <- stats::rgamma(trays, 1 / theta, 1 / theta)                                     # tray frailty, mean 1
+  m <- tr[rep(seq_len(trays), each = seeds), ]; m$unit_id <- m$unit; m$sample_id <- sprintf("%s_s%02d", m$unit, seq_len(seeds))
+  h <- 0.05 * fr[match(m$unit, tr$unit)] * ifelse(m$lot == "primed", hr, 1)
+  t <- (-log(stats::runif(nrow(m))) / h)^(1 / 1.5)                                     # Weibull PH, shape 1.5
+  m$time <- round(pmin(t, 21), 2); m$event <- as.integer(t <= 21)
+  spec <- list(handoff_version = "0.6.6", origin = "planned", organism = "test", system = "germination chamber", experimental_unit = "tray",
+               subsamples_per_unit = seeds, factors = list(list(name = "lot", n_levels = 2L, levels = list("untreated", "primed"))),
+               design = list(chosen = "crd", reps = trays / 2), primary_outcome = list(name = "days to germination", type = "survival", unit = "days", event_column = "event"),
+               analysis = list(model = "y ~ treatment", terms = list(treatment = "lot", layout_columns = list("lot")),
+                               goals = list("survival"), primary_goal = "survival", goal_terms = list(survival = list("treatment"))))
+  if (!is.null(power)) spec$power <- power
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(tr, file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(m, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  e <- list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "time", event_column = "event")
+  if (truth) {
+    jsonlite::write_json(list(outcome_model = list(family = "weibull_ph"), goal_truth = list(goal = "survival", model_terms = list("treatment"), status = "planted",
+      true_effect = hr, true_log_hazard_ratio = log(hr), effect_scale = "hazard ratio, last level vs reference")), file.path(d, "sim_truth.json"), auto_unbox = TRUE, digits = NA)
+    e$truth <- list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "survival", field = "goal_truth", terms = list("treatment"), test = "wald"))
+  }
+  bioana_write_manifest(d, e)
+  list(dir = d, data = m)
+}
+
+test_that("seeds on trays: subsamples kept (no averaging), tray = shared frailty, robust (Lin-Wei) score test = coxph(cluster); HR truth on one scale", {
+  f <- seed_folder(power = list(target_hazard_ratio = 0.6, events_required = 10000))
+  utils::capture.output(r <- bioana_analyze(f$dir, secondary = FALSE))
+  a <- r$summary$analyses$outcome; st <- a$stat_test
+  expect_equal(a$n_units_fitted, nrow(f$data))
+  expect_match(paste(a$warnings, collapse = " "), "not averaged")
+  expect_true(st$clustered); expect_equal(st$primary, "robust score (clustered)")
+  m <- f$data; m$lot <- factor(m$lot, c("untreated", "primed"))
+  rc <- summary(survival::coxph(survival::Surv(time, event) ~ lot + cluster(unit), data = m))$robscore
+  expect_equal(trow(st, "robust score")[[1]]$statistic, unname(rc["test"]), tolerance = 1e-8)
+  expect_match(st$note, "events observed, 10000 required")
+  gr <- a$goal_recovery
+  expect_equal(gr$true_effect, 0.6); expect_match(gr$scale, "hazard ratio")
+  expect_equal(gr$estimate, exp(r$results$outcome$estimate[r$results$outcome$term == "treatmentprimed"]))
+  expect_true(gr$sign_agreement)
 })

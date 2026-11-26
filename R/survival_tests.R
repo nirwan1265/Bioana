@@ -51,12 +51,22 @@
                        lower = lt$lower, upper = lt$upper, stringsAsFactors = FALSE)
   }
 
+  clustered <- "unit_id_" %in% names(d) && anyDuplicated(d$unit_id_) > 0
   if (k > 1) {
     # log-rank (stratified by blocks when the design has them), weighted on request
     lr <- survival::survdiff(S("grp_"), data = d)
     rows[[length(rows) + 1L]] <- row("treatment", "log-rank chi-squared", lr$chisq, k - 1, stats::pchisq(lr$chisq, k - 1, lower.tail = FALSE))
     oe <- data.frame(group = lev, observed = as.numeric(lr$obs), expected = as.numeric(lr$exp), stringsAsFactors = FALSE)
     primary <- "log-rank"
+    if (clustered) {
+      # subsamples clustered in units: robust (Lin-Wei) score test, the log-rank with a cluster-robust variance
+      rc <- survival::coxph(stats::as.formula("survival::Surv(y_, event_) ~ grp_ + cluster(unit_id_)", env = list2env(list(cluster = survival::cluster), parent = baseenv())), data = d)
+      rs <- summary(rc)$robscore
+      rows[[length(rows) + 1L]] <- row("treatment", "robust score chi-squared (Lin-Wei, clustered by unit)", rs[["test"]], rs[["df"]], rs[["pvalue"]])
+      primary <- "robust score (clustered)"
+      notes <- c(notes, sprintf("%d subsamples in %d units: the robust score test is primary; the plain log-rank, KM and RMST intervals treat subsamples as independent",
+                                nrow(d), length(unique(d$unit_id_))))
+    }
     if (length(strata_v)) {
       ls <- survival::survdiff(S(sprintf("grp_ + strata(%s)", paste(strata_v, collapse = ", "))), data = d)
       rows[[length(rows) + 1L]] <- row("treatment", sprintf("stratified log-rank chi-squared (strata: %s)", paste(strata_v, collapse = ", ")), ls$chisq, k - 1,
@@ -119,10 +129,14 @@
   life <- NULL
   if (!is.null(sv$life_table) && !isFALSE(sv$life_table)) life <- .ba_life_table(d, sv$life_table)
 
+  # events against the design's event-based power (Biodes power.events_required)
+  pw <- design$spec$power
+  ev_req <- suppressWarnings(as.numeric(pw$events_required %||% NA))
+  if (is.finite(ev_req) && sum(d$event_ == 1) < ev_req) notes <- c(notes, sprintf("%d events observed, %g required by the design (power.events_required): power is below the plan", sum(d$event_ == 1), ev_req))
   flat <- if (length(rows)) do.call(rbind, rows)
-  pr <- rows[[1]]
   list(summary = list(status = "run", test = "survival", package = "survival", version = as.character(utils::packageVersion("survival")),
                       groups = as.list(lev), factor = if (length(treat)) paste(treat, collapse = " x ") else NULL, strata = as.list(strata_v),
+                      events = sum(d$event_ == 1), events_required = if (is.finite(ev_req)) ev_req, clustered = clustered,
                       primary = primary, table = lapply(seq_len(nrow(flat %||% data.frame())), function(i) as.list(flat[i, ])),
                       km = lapply(seq_len(nrow(summ)), function(i) as.list(summ[i, ])), observed_expected = if (!is.null(oe)) lapply(seq_len(nrow(oe)), function(i) as.list(oe[i, ])),
                       cox = cox, ph_check = zph, rmst = rmst, aft = aft$summary, life_table = !is.null(life),

@@ -264,6 +264,18 @@ bioana_goals <- function() {
   }
   out$p <- p; out$detected <- isTRUE(p < alpha)
   te <- suppressWarnings(as.numeric(unlist(gt$true_effect)))
+  if (identical(type, "survival") && identical(g$test, "wald") && length(coefs) == 1L) {
+    # Cox coefficient = log hazard ratio: compared with Simitall's true_log_hazard_ratio (or log of a hazard-ratio truth)
+    tl <- suppressWarnings(as.numeric(unlist(gt$true_log_hazard_ratio)))
+    if (!length(tl) && grepl("hazard ratio", gt$effect_scale %||% "") && length(te) == 1L) tl <- log(te)
+    if (length(tl) == 1L) {
+      r <- res[res$term == coefs, , drop = FALSE]
+      out$estimate <- exp(r$estimate); out$true_effect <- exp(tl); out$scale <- "hazard ratio (compared on the log scale, Cox coefficient)"
+      out$bias <- r$estimate - tl; out$covered <- abs(r$estimate - tl) <= stats::qnorm(1 - alpha / 2) * r$se
+      out$sign_agreement <- sign(r$estimate) == sign(tl)
+      return(out)
+    }
+  }
   if (identical(type, "aft") && identical(g$test, "wald") && length(coefs) == 1L && length(te) == 1L) {
     # time ratio: compared on the log scale (survreg coefficient and SE)
     r <- res[res$term == coefs, , drop = FALSE]
