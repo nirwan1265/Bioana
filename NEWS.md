@@ -1,4 +1,11 @@
-# bioana 0.11.3
+# bioana 0.11.4
+
+- Weighted log-rank in base R (Fleming-Harrington p,q, Gehan, Tarone-Ware, k groups): survMisc is no longer needed
+  (it was missing on a user machine, so the delayed-effect goal fell back to Wald). Equal to survival::survdiff for
+  logrank and fh_p_0 (2 and 3 groups) and to survMisc for 3+ groups; survMisc's 2-group variance differs slightly
+  (lung FH(0,1): 3.46 here and with survdiff's variance, 3.45 in survMisc / the datanovia tutorial).
+- Tests that call cmprsk skip when it is not installed.
+
 
 - `analysis.survival.strata` now stratifies the Cox model too (`+ strata(v)`), not only the log-rank. Biodes 01d41ef
   puts blocks there instead of `+ block` for survival (`crd` / `factorial_crd`); no block coefficient is fitted. A

@@ -28,7 +28,7 @@ test_that("lung: KM medians, log-rank, Cox HR, landmarks = survival and the tuto
   expect_equal(trow(st, "Cox")[[1]]$estimate, unname(exp(stats::coef(cs))), tolerance = 1e-8)
   ls <- survival::survdiff(survival::Surv(time, status) ~ sex + strata(ph.ecog), data = x)
   expect_equal(trow(st, "stratified")[[1]]$statistic, ls$chisq); expect_equal(round(ls$chisq, 1), 10.8)  # tutorial: 10.8
-  expect_equal(round(trow(st, "weighted")[[1]]$statistic, 2), 3.45)                                       # tutorial: FH(0,1) 3.45
+  expect_equal(round(trow(st, "weighted")[[1]]$statistic, 2), 3.46)   # tutorial (survMisc) 3.45: survMisc's 2-group variance differs slightly from survdiff's
   st2 <- surv_run(bioana_example("lung"), list(survival = list(logrank_weight = "peto")))
   expect_equal(trow(st2, "weighted")[[1]]$statistic, survival::survdiff(survival::Surv(time, status) ~ sex, data = x, rho = 1)$chisq)  # 12.7
   d <- bioana_example("lung"); utils::capture.output(bioana_analyze(d, secondary = FALSE))
@@ -72,6 +72,7 @@ test_that("colon: pairwise log-rank (BH) = survminer::pairwise_survdiff and the 
 })
 
 test_that("mgus2 competing risks: Gray's test and Fine-Gray = cmprsk; Fine-Gray ~ survival::finegray; CIF 10% vs 1 - KM 21% at 20 years", {
+  skip_if_not_installed("cmprsk")
   d <- bioana_example("mgus2"); utils::capture.output(r <- bioana_analyze(d, secondary = FALSE))
   a <- r$summary$analyses$outcome; st <- a$stat_test
   expect_equal(st$test, "competing_risks"); expect_match(paste(a$warnings, collapse = " "), "cause-specific")
@@ -304,4 +305,22 @@ test_that("the fitted Cox formula is reported as one line, also for coxme (not '
   utils::capture.output(r <- bioana_analyze(f$dir, secondary = FALSE)); a <- r$summary$analyses$outcome
   expect_equal(a$engine$engine, "coxme")
   expect_match(a$model_fitted, "Surv\\(y_, event_\\) ~ treatment \\+ \\(1 \\| block\\)")
+})
+
+test_that("weighted log-rank in base R (no survMisc): fh_p_0 = survdiff(rho = p); logrank = survdiff; 3+ groups = survMisc", {
+  e <- new.env(); utils::data("cancer", package = "survival", envir = e); x <- e$lung
+  d2 <- transform(x, y_ = time, event_ = status - 1, grp_ = factor(sex))
+  d3 <- transform(subset(x, !is.na(ph.ecog) & ph.ecog < 3), y_ = time, event_ = status - 1, grp_ = factor(ph.ecog))
+  for (d in list(d2, d3)) {
+    expect_equal(bioana:::.ba_weighted_logrank(d, "logrank")$chisq, survival::survdiff(Surv(y_, event_) ~ grp_, data = d)$chisq)
+    for (r in c(0.5, 1)) expect_equal(bioana:::.ba_weighted_logrank(d, sprintf("fh_%s_0", r))$chisq, survival::survdiff(Surv(y_, event_) ~ grp_, data = d, rho = r)$chisq)
+  }
+  expect_equal(bioana:::.ba_weighted_logrank(d3, "fh_0_1")$df, 2)
+  expect_match(bioana:::.ba_weighted_logrank(d2, "nonsense"), "not a known weight")
+  skip_if_not_installed("survMisc")
+  te <- survMisc::ten(survival::survfit(survival::Surv(y_, event_) ~ grp_, data = d3)); invisible(utils::capture.output(survMisc::comp(te, p = 0, q = 1)))
+  l <- as.data.frame(attr(te, "lrt"))
+  expect_equal(bioana:::.ba_weighted_logrank(d3, "fh_0_1")$chisq, l$chiSq[grep("^FH_p=0_q=1$", l$W)], tolerance = 1e-8)
+  key <- c(gehan = "n", tarone_ware = "sqrtN")
+  for (w in names(key)) expect_equal(bioana:::.ba_weighted_logrank(d3, w)$chisq, l$chiSq[match(key[[w]], l$W)], tolerance = 1e-8)
 })

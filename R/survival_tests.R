@@ -147,17 +147,30 @@
 
 # Weighted log-rank by name (survMisc::comp rows; peto also = survdiff rho = 1).
 .ba_weighted_logrank <- function(d, w) {
+  # k-sample weighted log-rank in base R (no survMisc): U_g = sum w (d_g - n_g d / n), V from the hypergeometric
+  # variance; weights at each event time: logrank 1, gehan n, tarone_ware sqrt(n), fh_p_q S(t-)^p (1 - S(t-))^q
+  # with S the pooled Kaplan-Meier just before t (Fleming & Harrington 1991; Klein & Moeschberger 7.3).
+  # Equal to survMisc::comp and survival::survdiff (tests). peto keeps survdiff(rho = 1).
   if (identical(w, "peto")) { x <- survival::survdiff(survival::Surv(y_, event_) ~ grp_, data = d, rho = 1); df <- length(x$n) - 1
     return(list(chisq = x$chisq, df = df, p = stats::pchisq(x$chisq, df, lower.tail = FALSE))) }
-  if (!requireNamespace("survMisc", quietly = TRUE)) return(sprintf("weighted log-rank '%s' needs survMisc (not installed)", w))
   fh <- regmatches(w, regexec("^fh_([0-9.]+)_([0-9.]+)$", w))[[1]]
-  te <- survMisc::ten(survival::survfit(survival::Surv(y_, event_) ~ grp_, data = d))
-  invisible(utils::capture.output(if (length(fh)) survMisc::comp(te, p = as.numeric(fh[2]), q = as.numeric(fh[3])) else survMisc::comp(te)))
-  lrt <- as.data.frame(attr(te, "lrt"))
-  key <- c(gehan = "n", tarone_ware = "sqrtN", logrank = "1")[w]
-  i <- if (length(fh)) grep(sprintf("^FH_p=%s_q=%s$", fh[2], fh[3]), lrt$W) else match(key, lrt$W)
-  if (!length(i) || is.na(i[1])) return(sprintf("weighted log-rank '%s' is not a known weight (survival_rules.json logrank_weight)", w))
-  list(chisq = lrt$chiSq[i[1]], df = lrt$df[i[1]], p = lrt$pChisq[i[1]])
+  if (!length(fh) && !w %in% c("logrank", "gehan", "tarone_ware"))
+    return(sprintf("weighted log-rank '%s' is not a known weight (survival_rules.json logrank_weight)", w))
+  g <- droplevels(as.factor(d$grp_)); k <- nlevels(g); if (k < 2) return("weighted log-rank needs 2 or more groups")
+  tt <- sort(unique(d$y_[d$event_ == 1]))
+  nr <- vapply(tt, function(t) d$y_ >= t, logical(nrow(d)))            # at risk, rows x times
+  ev <- vapply(tt, function(t) d$y_ == t & d$event_ == 1, logical(nrow(d)))
+  G <- stats::model.matrix(~ g - 1)                                    # rows x groups
+  ng <- t(G) %*% nr; dg <- t(G) %*% ev; n <- colSums(nr); dd <- colSums(ev)
+  s_minus <- c(1, cumprod(1 - dd / n))[seq_along(tt)]                   # pooled KM just before each event time
+  wt <- if (length(fh)) s_minus^as.numeric(fh[2]) * (1 - s_minus)^as.numeric(fh[3]) else switch(w, logrank = rep(1, length(tt)), gehan = n, tarone_ware = sqrt(n))
+  idx <- seq_len(k - 1)
+  U <- as.vector((dg - ng * rep(dd / n, each = k)) %*% wt)[idx]
+  vf <- wt^2 * dd * ifelse(n > 1, (n - dd) / (n - 1), 0) / n
+  V <- matrix(0, k - 1, k - 1)
+  for (a in idx) for (b in idx) V[a, b] <- sum(vf * ng[a, ] * ((a == b) - ng[b, ] / n))
+  chisq <- as.numeric(t(U) %*% MASS::ginv(V) %*% U); df <- k - 1
+  list(chisq = chisq, df = df, p = stats::pchisq(chisq, df, lower.tail = FALSE))
 }
 
 .ba_pairwise_logrank <- function(d, lev, req, sr) {
