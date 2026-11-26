@@ -47,3 +47,7 @@ vcd	CRAN	engines	Cohen and weighted kappa with CIs (agreement.R)
 psych	CRAN	engines	ICC (six Shrout-Fleiss forms) for continuous ratings (agreement.R)
 irr	CRAN	engines	Fleiss kappa for 3+ raters (optional; Light kappa without it)
 Hmisc	CRAN	dev	reference values in tests (rcorr)
+BiocManager	CRAN	core	installs the Bioconductor packages (install_bioana.R)
+remotes	CRAN	core	installs the GitHub packages (install_bioana.R)
+studyforge	GitHub:nirwan1265/BioDesignGPT	suite	Biodes: goal registry (analysis_goals.json) when installed; design folders
+dplyr	CRAN	dev	reference values in tests (grouped rstatix summaries)

@@ -41,12 +41,20 @@
       primary <- rows[[if (scale == "ordinal") match(rules$ordinal_primary %||% "linear", c("unweighted", "linear", "quadratic")) else 1L]]
       notes <- c(notes, sprintf("observed agreement %.1f%% of %d units", 100 * po, sum(tb)))
     } else {
+      R_ <- as.matrix(as.data.frame(lapply(F_, as.character)))
       if (requireNamespace("irr", quietly = TRUE)) {
-        fk <- irr::kappam.fleiss(as.matrix(F_))
+        # Fleiss (1971) for 3+ raters, overall and per category (irr::kappam.fleiss(detail = TRUE)); Light (1971) via irr
+        fk <- irr::kappam.fleiss(R_, detail = TRUE)
         add(sprintf("Fleiss' kappa (%d raters)", k), fk$value, NA, NA, fk$statistic, fk$p.value)
-      } else notes <- c(notes, "Fleiss' kappa needs irr (not installed): Light's kappa (mean of pairwise Cohen's kappa) instead")
-      pk <- utils::combn(k, 2, function(ij) .ba_vcd_kappa(table(F_[[ij[1]]], F_[[ij[2]]]), "Equal-Spacing")$u[1])
-      add(sprintf("Light's kappa (mean of %d pairwise Cohen's kappas)", length(pk)), mean(pk))
+        dt <- fk$detail
+        if (!is.null(dt)) for (cg in rownames(dt)) add(sprintf("Fleiss' kappa, category %s", cg), dt[cg, "Kappa"], NA, NA, dt[cg, "z"], dt[cg, "p.value"])
+        lk <- irr::kappam.light(R_)
+        add(sprintf("Light's kappa (mean of %d pairwise Cohen's kappas)", choose(k, 2)), lk$value, NA, NA, lk$statistic, lk$p.value)
+      } else {
+        notes <- c(notes, "Fleiss' kappa needs irr (not installed): Light's kappa (mean of pairwise Cohen's kappas, vcd) instead")
+        pk <- utils::combn(k, 2, function(ij) .ba_vcd_kappa(table(F_[[ij[1]]], F_[[ij[2]]]), "Equal-Spacing")$u[1])
+        add(sprintf("Light's kappa (mean of %d pairwise Cohen's kappas)", length(pk)), mean(pk))
+      }
       primary <- rows[[1]]
     }
   }

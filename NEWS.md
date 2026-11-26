@@ -1,3 +1,12 @@
+# bioana 0.11.1
+
+- Fleiss' kappa through irr when installed: overall and per category (`detail = TRUE`), Light's kappa from
+  `irr::kappam.light`; tests on irr's `diagnoses` and `anxiety` data with the tutorials' numbers (Fleiss 0.534,
+  z 9.89; 6 raters 0.43; Light 0.555; ICC2 0.20, p 0.056; ICC2k 0.43) and against `irr::kappa2`, `irr::icc`.
+  They skip where irr is not installed.
+- `requirements.txt` (52 packages by profile, generated from `inst/rules/requirements.tsv`, kept in sync by a test);
+  added BiocManager, remotes, studyforge, dplyr.
+
 # bioana 0.11.0
 
 - Categorical tests (stat_tests.tsv): McNemar (exact on few discordant pairs), Cochran's Q + pairwise McNemar,

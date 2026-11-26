@@ -13,3 +13,11 @@ test_that("requirements.tsv lists every package the engines and the code call", 
   expect_true(all(d$installed))
   expect_error(bioana_check_dependencies("nope"), "Unknown profile")
 })
+
+test_that("requirements.txt lists every package in requirements.tsv", {
+  root <- normalizePath(file.path(testthat::test_path(), "..", ".."), mustWork = FALSE)
+  f <- file.path(root, "requirements.txt")
+  skip_if_not(file.exists(f), "requirements.txt not in this build")
+  txt <- readLines(f); pk <- sub("\\s.*$", "", txt[nzchar(txt) & !startsWith(txt, "#")])
+  expect_setequal(pk, unique(bioana:::.ba_tsv("requirements")$package))
+})

@@ -77,3 +77,49 @@ test_that("three raters (long format): Light's kappa = mean pairwise Cohen witho
   expect_equal(y$s$primary$estimate, icc2, tolerance = 1e-10)
   expect_equal(nrow(y$res), 6)
 })
+
+# With irr installed: the tutorials' own data (irr::diagnoses, irr::anxiety) and numbers.
+irr_data <- function(x) { e <- new.env(); utils::data(list = x, package = "irr", envir = e); e[[x]] }
+
+test_that("Fleiss' kappa = irr::kappam.fleiss and the tutorial (diagnoses, 3 raters: 0.534, z 9.89; per category; 6 raters 0.43); Light's 0.555", {
+  skip_if_not_installed("irr")
+  dg <- irr_data("diagnoses")
+  rows3 <- data.frame(unit = sprintf("P%02d", seq_len(nrow(dg))), lapply(dg[1:3], as.character), check.names = FALSE, stringsAsFactors = FALSE)
+  names(rows3)[2:4] <- c("r1", "r2", "r3")
+  x <- run_ca(meta_folder(rows3, list(agreement = list(raters = list("r1", "r2", "r3"), scale = "nominal"))), "agreement")
+  m <- x$res
+  fk <- irr::kappam.fleiss(dg[, 1:3], detail = TRUE)
+  expect_equal(x$s$primary$estimate, fk$value, tolerance = 1e-10)
+  expect_equal(round(x$s$primary$estimate, 3), 0.534); expect_equal(round(x$s$primary$z, 2), 9.89)
+  cat_k <- function(c) m$estimate[m$measure == sprintf("Fleiss' kappa, category %s", c)]
+  expect_equal(round(cat_k("1. Depression"), 3), 0.416); expect_equal(round(cat_k("4. Neurosis"), 3), 0.236); expect_equal(cat_k("5. Other"), 1)
+  expect_equal(round(m$estimate[grepl("^Light", m$measure)], 3), 0.555)
+  expect_equal(m$estimate[grepl("^Light", m$measure)], irr::kappam.light(dg[, 1:3])$value, tolerance = 1e-10)
+  rows6 <- data.frame(unit = sprintf("P%02d", seq_len(nrow(dg))), lapply(dg, as.character), stringsAsFactors = FALSE)
+  names(rows6)[-1] <- paste0("r", 1:6)
+  x6 <- run_ca(meta_folder(rows6, list(agreement = list(raters = as.list(paste0("r", 1:6)), scale = "nominal"))), "agreement")
+  expect_equal(round(x6$s$primary$estimate, 2), 0.43)
+})
+
+test_that("two raters: Cohen's kappa = irr::kappa2; weighted (equal / squared) = irr::kappa2(weight)", {
+  skip_if_not_installed("irr")
+  set.seed(2); n <- 60; truth <- sample(1:4, n, TRUE)
+  r1 <- pmin(4, pmax(1, truth + sample(c(-1, 0, 0, 0, 1), n, TRUE))); r2 <- pmin(4, pmax(1, truth + sample(c(-1, 0, 0, 1), n, TRUE)))
+  rows <- data.frame(unit = sprintf("L%02d", 1:n), rater_a = r1, rater_b = r2)
+  m <- run_ca(meta_folder(rows, list(agreement = list(raters = list("rater_a", "rater_b"), scale = "ordinal"))), "agreement")$res
+  expect_equal(m$estimate[m$measure == "Cohen's kappa (unweighted)"], irr::kappa2(cbind(r1, r2))$value, tolerance = 1e-8)
+  expect_equal(m$estimate[grepl("linear", m$measure)], irr::kappa2(cbind(r1, r2), weight = "equal")$value, tolerance = 1e-8)
+  expect_equal(m$estimate[grepl("quadratic", m$measure)], irr::kappa2(cbind(r1, r2), weight = "squared")$value, tolerance = 1e-8)
+})
+
+test_that("ICC on the tutorial's anxiety data = irr::icc and the tutorial (ICC2 ~ 0.20, CI -0.04 to 0.49, p 0.056; ICC2k ~ 0.43)", {
+  skip_if_not_installed("irr")
+  ax <- irr_data("anxiety")
+  rows <- data.frame(unit = sprintf("S%02d", seq_len(nrow(ax))), ax)
+  x <- run_ca(meta_folder(rows, list(agreement = list(raters = as.list(names(ax)), scale = "continuous"))), "agreement")
+  ic <- irr::icc(ax, model = "twoway", type = "agreement", unit = "single")
+  expect_equal(x$s$primary$estimate, ic$value, tolerance = 1e-8)
+  expect_equal(c(x$s$primary$ci_low, x$s$primary$ci_high), c(ic$lbound, ic$ubound), tolerance = 1e-6)
+  expect_equal(round(x$s$primary$estimate, 2), 0.20); expect_equal(round(x$s$primary$p, 3), 0.056)
+  expect_equal(round(x$res$estimate[grepl("^ICC2k", x$res$measure)], 2), 0.43)
+})

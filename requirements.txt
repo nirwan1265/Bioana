@@ -1,0 +1,69 @@
+# bioana requirements, generated from inst/rules/requirements.tsv (keep them in sync; tests/testthat/test-dependencies.R checks).
+# package  # source  # what for. Install: Rscript install_bioana.R [minimal|analysis|full|suite], or bioana_install_dependencies().
+
+## core (always)
+BiocManager          # cran                             # installs the Bioconductor packages (install_bioana.R)
+jsonlite             # cran                             # design folders, manifests, summaries (Imports)
+Matrix               # cran                             # sparse matrices (Imports)
+remotes              # cran                             # installs the GitHub packages (install_bioana.R)
+
+## engines (the analyses)
+afex                 # cran                             # repeated-measures, mixed and factorial ANOVA with sphericity corrections and effect sizes (stat_tests.tsv)
+BiocGenerics         # bioconductor                     # DSS results (start)
+bsseq                # bioconductor                     # BSseq objects for DSS
+car                  # cran                             # type III ANOVA tables and Levene tests used with afex
+cmprsk               # cran                             # competing risks: cumulative incidence, Gray test, Fine-Gray (survival_tests.R)
+coin                 # cran                             # standardized Z behind the Wilcoxon effect size r (rstatix::wilcox_effsize)
+coxme                # cran                             # mixed-effects Cox model (survival with repeated or clustered units)
+DESeq2               # bioconductor                     # counts, fixed designs (rank 1)
+DSS                  # bioconductor                     # bisulfite counts (beta-binomial)
+edgeR                # bioconductor                     # counts, peaks, windows; IP x input model; TMM for limma-voom and dream
+effectsize           # cran                             # Cohen's h for two proportions (stat_tests.tsv prop_test)
+emmeans              # cran                             # post-hoc comparisons and simple effects after the ANOVA (stat_rules.json)
+epitools             # cran                             # odds ratio and relative risk with Wald CIs (stat_tests.tsv prop_test)
+GenomeInfoDb         # bioconductor                     # DSS results (seqnames)
+glmmTMB              # cran                             # outcome secondary engine (gaussian, binomial, nbinom2)
+irr                  # cran                             # Fleiss kappa for 3+ raters (optional; Light kappa without it)
+KMsurv               # cran                             # actuarial life tables on request (KMsurv::lifetab)
+limma                # bioconductor                     # limma-voom, limma on M-values and log ratios, duplicateCorrelation
+lme4                 # cran                             # outcome mixed models (glmer, glmer.nb)
+lmerTest             # cran                             # outcome lmer with Satterthwaite df
+MASS                 # cran                             # glm.nb (count outcomes), polr fallback
+nnet                 # cran                             # multinomial logistic engine for nominal outcomes (multinom)
+ordinal              # cran                             # clm / clmm (ordinal outcomes)
+psych                # cran                             # ICC (six Shrout-Fleiss forms) for continuous ratings (agreement.R)
+reformulas           # cran                             # random-term parsing for mixed models
+rstatix              # cran                             # Cohen's d, Wilcoxon r, eta2[H], Kendall's W, Dunn, Games-Howell, pairwise Fisher (stat_tests.tsv); reference values in tests
+S4Vectors            # bioconductor                     # DESeq2 convergence flags (mcols)
+survival             # cran                             # coxph (survival outcomes), frailty
+survMisc             # cran                             # weighted log-rank (Gehan, Tarone-Ware, Fleming-Harrington) on request
+variancePartition    # bioconductor                     # dream: counts with random terms (repeated or nested units)
+vcd                  # cran                             # Cohen and weighted kappa with CIs (agreement.R)
+
+## readers (raw files)
+haven                # cran                             # ADTTE in SAS formats (.xpt, .sas7bdat)
+Rsamtools            # bioconductor                     # BAM flags and read lengths
+Rsubread             # bioconductor                     # featureCounts on BAM files
+tximport             # bioconductor                     # Salmon / kallisto to gene counts
+
+## genetics (GWAS)
+BGLR                 # cran                             # genomic prediction (Bayesian models)
+GAPIT                # github jiabowang/GAPIT           # GWAS secondary engine (MLM)
+ranger               # cran                             # genomic prediction (random forest)
+rrBLUP               # cran                             # GWAS on line means (rank 1); kinship
+
+## plots
+ggplot2              # cran                             # plot_* functions
+patchwork            # cran                             # multi-panel plots
+
+## suite (Biodes, Simitall)
+simitall             # github nirwan1265/simitall       # Simitall end-to-end tests (optional)
+studyforge           # github nirwan1265/BioDesignGPT   # Biodes: goal registry (analysis_goals.json) when installed; design folders
+
+## dev (tests only)
+devtools             # cran                             # load_all, test, document
+dplyr                # cran                             # reference values in tests (grouped rstatix summaries)
+Hmisc                # cran                             # reference values in tests (rcorr)
+survminer            # cran                             # reference values in tests (pairwise_survdiff)
+testthat             # cran                             # tests
+
