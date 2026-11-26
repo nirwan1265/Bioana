@@ -28,17 +28,22 @@ KMsurv               # cran                             # actuarial life tables 
 limma                # bioconductor                     # limma-voom, limma on M-values and log ratios, duplicateCorrelation
 lme4                 # cran                             # outcome mixed models (glmer, glmer.nb)
 lmerTest             # cran                             # outcome lmer with Satterthwaite df
+lmtest               # cran                             # regression diagnostics: Breusch-Pagan, RESET, Durbin-Watson (regression.R)
 MASS                 # cran                             # glm.nb (count outcomes), polr fallback
 nnet                 # cran                             # multinomial logistic engine for nominal outcomes (multinom)
 ordinal              # cran                             # clm / clmm (ordinal outcomes)
+pROC                 # cran                             # DeLong interval for the logistic AUC (regression.R)
 psych                # cran                             # ICC (six Shrout-Fleiss forms) for continuous ratings (agreement.R)
+pwr                  # cran                             # sensitivity: the effect a design could detect (regression.R)
 reformulas           # cran                             # random-term parsing for mixed models
+robustbase           # cran                             # MM robust regression on request (analysis.regression.robust = mm)
 rstatix              # cran                             # Cohen's d, Wilcoxon r, eta2[H], Kendall's W, Dunn, Games-Howell, pairwise Fisher (stat_tests.tsv); reference values in tests
 S4Vectors            # bioconductor                     # DESeq2 convergence flags (mcols)
+sandwich             # cran                             # HC3 robust standard errors (regression.R)
 survival             # cran                             # coxph (survival outcomes), frailty
-survMisc             # cran                             # weighted log-rank (Gehan, Tarone-Ware, Fleming-Harrington) on request
 variancePartition    # bioconductor                     # dream: counts with random terms (repeated or nested units)
 vcd                  # cran                             # Cohen and weighted kappa with CIs (agreement.R)
+WRS2                 # cran                             # robust tests on trimmed means and robust correlations (robust.R, correlation.R)
 
 ## readers (raw files)
 haven                # cran                             # ADTTE in SAS formats (.xpt, .sas7bdat)
@@ -61,9 +66,12 @@ simitall             # github nirwan1265/simitall       # Simitall end-to-end te
 studyforge           # github nirwan1265/BioDesignGPT   # Biodes: goal registry (analysis_goals.json) when installed; design folders
 
 ## dev (tests only)
+carData              # cran                             # datanovia tutorial data in tests (Salaries)
+datarium             # cran                             # datanovia tutorial data in tests (marketing, genderweight, jobsatisfaction)
 devtools             # cran                             # load_all, test, document
 dplyr                # cran                             # reference values in tests (grouped rstatix summaries)
 Hmisc                # cran                             # reference values in tests (rcorr)
+mlbench              # cran                             # datanovia tutorial data in tests (PimaIndiansDiabetes2)
 survminer            # cran                             # reference values in tests (pairwise_survdiff)
+survMisc             # cran                             # cross-check of the base-R weighted log-rank (survival_tests.R .ba_weighted_logrank)
 testthat             # cran                             # tests
-

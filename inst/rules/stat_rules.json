@@ -42,5 +42,9 @@
     "ordinal": "random",
     "nominal": "drop"
   },
-  "_note_categorical_block_terms": "fixed block terms in binary / ordinal / nominal models with fewer than min_units_per_block units per block: the block coefficients bias the odds ratios away from 1 (Neyman-Scott; pairs double the log OR). binary / ordinal -> a random block intercept (1 | block): glmer / clmm, ORs conditional on the block; nominal (no mixed engine) -> the block is dropped from the multinomial model (marginal ORs) and the generalized CMH test stratifies on it. Simitall check: 150 blocks of 2, true purple log OR 1.10, fixed blocks 2.13."
+  "_note_categorical_block_terms": "fixed block terms in binary / ordinal / nominal models with fewer than min_units_per_block units per block: the block coefficients bias the odds ratios away from 1 (Neyman-Scott; pairs double the log OR). binary / ordinal -> a random block intercept (1 | block): glmer / clmm, ORs conditional on the block; nominal (no mixed engine) -> the block is dropped from the multinomial model (marginal ORs) and the generalized CMH test stratifies on it. Simitall check: 150 blocks of 2, true purple log OR 1.10, fixed blocks 2.13.",
+  "trim": 0.2,
+  "seed": 123,
+  "robust_when_outliers": true,
+  "_note_robust": "family robust (WRS2, trimmed means, R/robust.R): run on request (analysis.stat_tests: [\"robust\"] or an id) and, when robust_when_outliers, next to the primary test whose checks find extreme outliers; the primary test never changes. trim: share trimmed from each tail; seed: bootstrap effect-size CIs."
 }

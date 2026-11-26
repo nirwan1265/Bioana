@@ -177,7 +177,15 @@
   }
   # classical ANOVA next to the model (stat_tests.tsv): repeated-measures / mixed / factorial, post-hoc, effect sizes
   st <- NULL
-  if (type %in% c("continuous", "ordinal", "binary", "nominal", "survival") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
+  reg <- NULL
+  if (.ba_has_covariates(p) && type %in% c("continuous", "binary") && !isFALSE(args$regression)) {
+    # measured predictors (covariates): the regression layer instead of the group tests (R/regression.R)
+    reg <- tryCatch(.ba_regression(fit, frame, p, design, alpha, type, args), error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
+    for (k in c("coefficients", "type2", "influence", "influence_refit", "vif", "simple_slopes", "adjusted_means", "predictions", "robust"))
+      if (!is.null(reg[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(reg[[k]], file.path(outdir, paste0("regression_", k, ".tsv"))), paste0("regression_", k)))
+    if (!is.null(reg$summary$sensitivity$slopes)) paths <- c(paths, regression_sensitivity = .ba_write_tsv(reg$summary$sensitivity$slopes, file.path(outdir, "regression_sensitivity.tsv")))
+  }
+  if (type %in% c("continuous", "ordinal", "binary", "nominal", "survival") && !isFALSE(args$anova) && !isFALSE(args$stat_tests) && is.null(reg)) {
     st <- tryCatch(if (type == "survival") { fr <- frame; fr$event_ <- fr$event_raw_ %||% fr$event_; .ba_survival_tests(fr, design$parsed, design, goal, alpha, args, fit) }
                    else .ba_stat_tests(frame, p_stat, design, goal, alpha, type, args),
                    error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
@@ -205,7 +213,7 @@
                   goal = c(.ba_goal_summary(goal, plan), if (!is.null(goal_result)) list(result = goal_result),
                            if (!is.null(goal$effect)) list(effect_scale_used = .ba_tsv("engines")$estimate_scale[.ba_tsv("engines")$engine == eng])),
                   secondary_engine = .ba_secondary_engine(ch$chain, eng),
-                  stat_test = st$summary,
+                  stat_test = st$summary, regression = reg$summary,
                   anova = if (is.null(aov)) NULL else lapply(split(cbind(term = rownames(aov), aov), seq_len(nrow(aov))), as.list),
                   warnings = warn)
   truth <- .ba_entry_truth(entry, design$dir)
@@ -242,6 +250,15 @@
           summary$goal_recovery$probabilities <- gpr[c("max_abs_diff", "covered", "cells", "note")]
           summary$goal_recovery$covered <- gpr$covered == gpr$cells
         } else summary$goal_recovery$probabilities <- gpr
+      }
+      if (identical(goal$id, "regression") && (length(gt$true_slopes) || length(gt$true_log_odds_ratios))) {
+        sl <- .ba_slope_recovery(gt, res, alpha, type, p)
+        if (!is.null(sl)) {
+          summary$goal_recovery$slopes <- sl
+          if (nrow(sl) == 1L) summary$goal_recovery[c("estimate", "true_effect", "covered")] <- list(sl$estimate, sl$true, sl$covered)
+          else summary$goal_recovery$covered <- all(sl$covered)
+          summary$goal_recovery$scale <- if (type == "binary") "odds ratio per unit of each covariate (compared on the log scale)" else "slope per unit of each covariate (as fitted, after any transform)"
+        }
       }
       if (type == "binary" && length(truth$outcome_model$conditional_odds_ratios)) {
         orr <- .ba_odds_ratio_recovery(truth$outcome_model$conditional_odds_ratios, res, alpha, has_random)

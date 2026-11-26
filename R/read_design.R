@@ -63,11 +63,11 @@
          call. = FALSE)
   }
   list(dir = biodes_dir, spec = spec, layout = layout, meta = meta, model = model,
-       parsed = .ba_parse_model(model, spec, layout, rules))
+       parsed = .ba_parse_model(model, spec, layout, rules, meta = meta))
 }
 
 # Turn analysis.model into variables, roles and layout columns.
-.ba_parse_model <- function(model, spec, layout, rules = .ba_rules("handoff")) {
+.ba_parse_model <- function(model, spec, layout, rules = .ba_rules("handoff"), meta = NULL) {
   bad <- Filter(function(tok) grepl(tok, model, fixed = TRUE), unlist(rules$unsupported_model_tokens))
   f <- tryCatch(stats::as.formula(model), error = function(e) NULL)
   if (length(bad) || is.null(f)) {
@@ -87,8 +87,19 @@
   vars <- setdiff(all.vars(f), all.vars(f[[2]]))
   factor_names <- vapply(spec$factors %||% list(), function(x) x$name %||% "", "")
   role <- vapply(vars, function(v) term_rules$terms[[v]]$role %||% term_rules$unknown_term_role, "")
-  # variables used inside I(), e.g. I(treatment^2) in response-surface designs, are numeric, not factors
-  numeric_vars <- intersect(vars, .ba_numeric_vars(fixed))
+  # any term listed in analysis.covariates (covariate5, or a column name such as glucose) is a covariate
+  cov_terms <- unlist(lapply(spec$analysis$covariates %||% list(), function(z) z$term))
+  role[vars %in% cov_terms | grepl("^covariate[0-9]*$", vars)] <- "covariate"
+  # variables used inside I(), e.g. I(treatment^2) in response-surface designs, are numeric, not factors;
+  # covariates (role covariate: measured predictors) are always numeric
+  numeric_vars <- union(intersect(vars, .ba_numeric_vars(fixed)), vars[role == "covariate"])
+  covs <- spec$analysis$covariates %||% list()
+  cov_entry <- function(v) {
+    hit <- Filter(function(z) identical(z$term, v), covs)
+    if (length(hit)) return(hit[[1]])
+    k <- term_rules$terms[[v]]$from_covariate
+    if (!is.null(k) && length(covs) >= k && is.null(covs[[k]]$term)) covs[[k]] else NULL
+  }
   # analysis.terms (Biodes 6e49dab+): which generic terms are layout columns, optionally term -> column
   aterms <- spec$analysis$terms %||% list()
   layout_terms <- unlist(aterms$layout_columns)
@@ -108,13 +119,16 @@
     if (!is.null(r$from_spec_factor) && length(factor_names) >= r$from_spec_factor) {
       cands <- c(cands, factor_names[[r$from_spec_factor]])
     }
-    cands <- unique(c(cands, unlist(r$columns), v))
-    ok <- cands[cands %in% names(layout)]
+    ce <- if (identical(role[[v]], "covariate")) cov_entry(v)
+    cands <- unique(c(cands, ce$column, ce$name, unlist(r$columns), v))
+    # covariates are measured per unit: their column is in the sample metadata, not the layout
+    pool <- if (identical(role[[v]], "covariate")) unique(c(names(layout), names(meta))) else names(layout)
+    ok <- cands[cands %in% pool]
     skipped <- Filter(is_cell_label, ok)
     hit <- setdiff(ok, skipped)[1]
     if (is.na(hit)) {
-      stop(sprintf("Model term '%s' in '%s' has no matching column in field_layout.csv (looked for: %s%s). Add the column name to inst/suite/model_terms.json, or have Biodes list it in analysis.terms.",
-                   v, model, paste(cands, collapse = ", "),
+      stop(sprintf("Model term '%s' in '%s' has no matching column in field_layout.csv%s (looked for: %s%s). Add the column name to inst/suite/model_terms.json, or have Biodes list it in analysis.terms.",
+                   v, model, if (identical(role[[v]], "covariate")) " or the sample metadata" else "", paste(cands, collapse = ", "),
                    if (length(skipped)) sprintf("; skipped %s: its levels join several factors", paste(skipped, collapse = ", ")) else ""),
            call. = FALSE)
     }
@@ -136,6 +150,13 @@
     if (is.na(k) && !is.null(r$from_spec_factor) && length(factor_names) >= r$from_spec_factor) k <- r$from_spec_factor
     lv <- if (!is.na(k)) unlist(spec$factors[[k]]$levels) else NULL
     if (length(lv)) levels[[v]] <- as.character(lv)
+    if (identical(role[[v]], "covariate")) {
+      # covariate: unit and transform from analysis.covariates (log, log10, log2, sqrt), applied by .ba_frame
+      ce <- cov_entry(v); tf <- ce$transform
+      fn <- if (is.null(tf)) NULL else switch(tf, log = log, log10 = log10, log2 = log2, sqrt = sqrt, NULL)
+      values[[v]] <- list(levels = NULL, values = NULL, unit = ce$unit %||% "", scale = tf %||% "linear", name = ce$name %||% v, transform = fn)
+      next
+    }
     # numeric levels (Biodes factors[].values / unit / scale), aligned with levels
     vv <- if (!is.na(k)) unlist(spec$factors[[k]]$values) else NULL
     if (length(vv)) values[[v]] <- list(levels = if (length(lv) == length(vv)) as.character(lv) else NULL, values = as.numeric(vv),

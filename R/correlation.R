@@ -14,13 +14,19 @@
   miss <- setdiff(vars, names(dat))
   if (length(vars) < 2) stop("Correlation needs at least two variables (analysis.correlation.variables).", call. = FALSE)
   if (length(miss)) stop(sprintf("Correlation variables not in the table: %s.", paste(miss, collapse = ", ")), call. = FALSE)
-  method <- match.arg(cs$method %||% rules$method %||% "pearson", c("pearson", "spearman", "kendall"))
+  method <- match.arg(cs$method %||% rules$method %||% "pearson", c("pearson", "spearman", "kendall", "percentage_bend", "winsorized"))
+  robust_m <- method %in% c("percentage_bend", "winsorized")
+  if (robust_m && !requireNamespace("WRS2", quietly = TRUE)) stop("Robust correlations (percentage_bend, winsorized) need WRS2.", call. = FALSE)
   # Biodes 0.6.7: an unstated method is pearson, with assumptions["analysis.correlation.method"] saying so
   method_assumed <- design$spec$assumptions[["analysis.correlation.method"]]
   adj <- cs$adjust %||% rules$adjust %||% "holm"
   X <- as.data.frame(lapply(dat[vars], function(z) suppressWarnings(as.numeric(z))))
   notes <- character()
-  one <- function(x, y) withCallingHandlers(stats::cor.test(x, y, method = method),
+  one <- function(x, y) if (robust_m) {
+    # WRS2 (Wilcox): percentage-bend (beta = 0.2) or 20% winsorized correlation, t test on n - 2 df
+    r <- if (method == "percentage_bend") WRS2::pbcor(x, y, beta = rules$pb_beta %||% 0.2) else WRS2::wincor(x, y, tr = rules$win_trim %||% 0.2)
+    list(estimate = r$cor, statistic = r$test, parameter = length(x) - 2, p.value = r$p.value, conf.int = NULL)
+  } else withCallingHandlers(stats::cor.test(x, y, method = method),
     warning = function(w) { if (grepl("ties|exact", conditionMessage(w))) { notes <<- unique(c(notes, "ties: normal approximation for the rank correlation p-value")); invokeRestart("muffleWarning") } })
   pairs <- utils::combn(vars, 2, simplify = FALSE)
   long <- function(Z, scope) {
@@ -66,8 +72,9 @@
              correlation_matrix = .ba_write_tsv(mat("raw"), file.path(outdir, "correlation_matrix.tsv")))
   if (any(tab$scope == "within design")) paths <- c(paths, correlation_matrix_within = .ba_write_tsv(mat("within design"), file.path(outdir, "correlation_matrix_within.tsv")))
   raw <- tab[tab$scope == "raw", ]
-  summary <- list(data_type = "traits", method = method, method_assumed = method_assumed, package = "stats", version = as.character(utils::packageVersion("stats")),
-                  call = sprintf("stats::cor.test(x, y, method = '%s') per pair; p.adjust('%s')", method, adj), variables = as.list(unname(vars)), trait_names = as.list(stats::setNames(names(vars) %||% vars, vars)),
+  pk_ <- if (robust_m) "WRS2" else "stats"
+  summary <- list(data_type = "traits", method = method, method_assumed = method_assumed, package = pk_, version = as.character(utils::packageVersion(pk_)),
+                  call = if (robust_m) sprintf("WRS2::%s per pair; p.adjust('%s')", if (method == "percentage_bend") "pbcor(x, y, beta = 0.2)" else "wincor(x, y, tr = 0.2)", adj) else sprintf("stats::cor.test(x, y, method = '%s') per pair; p.adjust('%s')", method, adj), variables = as.list(unname(vars)), trait_names = as.list(stats::setNames(names(vars) %||% vars, vars)),
                   n_pairs = nrow(raw), n_significant = sum(raw$p_adj < alpha), within_design = res_note,
                   strongest = if (nrow(raw)) { i <- which.max(abs(raw$r)); list(var1 = raw$var1[i], var2 = raw$var2[i], r = raw$r[i], p_adj = raw$p_adj[i]) },
                   reference = rules$reference, tutorial = "docs/engines/correlation_agreement.md", warnings = notes)

@@ -183,6 +183,15 @@ bioana_goals <- function() {
     return(list(test = "lrt", coefs = character(), drop = k, drop_terms = terms_hit, tested_terms = terms_hit, note = pnote,
                 label = sprintf("time_course: %s (%d coefficients)", paste(terms_hit, collapse = ", "), length(k))))
   }
+  if (id == "regression") {
+    # slopes of the covariates (role covariate): the goal's terms, else every covariate main effect
+    cv <- p$vars[vapply(p$vars, function(v) identical(p$role[[v]], "covariate"), logical(1))]
+    tv <- intersect(goal$terms %||% cv, cv); if (!length(tv)) tv <- cv
+    if (!length(tv)) stop("Goal 'regression': analysis.model has no covariate term (covariate, covariate2, ...).", call. = FALSE)
+    k <- cols[ct %in% tv]
+    if (!length(k)) stop(sprintf("Goal 'regression': no main-effect coefficient for %s.", paste(tv, collapse = ", ")), call. = FALSE)
+    return(list(test = "wald", coefs = k, drop = character(), drop_terms = character(), label = NULL, tested_terms = unique(ct[k])))
+  }
   if (id == "trend") {
     tv <- goal$terms[1]
     k <- cols[ct == tv]
@@ -440,4 +449,20 @@ bioana_goals <- function() {
   if (!length(rows)) return(NULL)
   list(table = do.call(rbind, rows), scale = sprintf("odds ratio (Simitall conditional_odds_ratios; the model's OR is %s)",
                                                        if (conditional) "conditional on the random block / unit effect" else "marginal: no unit effects in the model"))
+}
+
+# Regression goal truth (Simitall goal_truth.true_slopes {term: slope per unit} for continuous outcomes, or
+# true_log_odds_ratios {term: log OR per unit} for binary): each covariate's coefficient, its interval, covered.
+.ba_slope_recovery <- function(gt, res, alpha, type, p) {
+  tv <- unlist(if (type == "binary") gt$true_log_odds_ratios %||% gt$true_slopes else gt$true_slopes)
+  if (!length(tv)) return(NULL)
+  rows <- lapply(names(tv), function(t) {
+    r <- res[res$term == t, , drop = FALSE]; if (!nrow(r)) return(NULL)
+    q <- if (type == "continuous" && is.finite(r$df[1])) stats::qt(1 - alpha / 2, r$df[1]) else stats::qnorm(1 - alpha / 2)
+    lo <- r$estimate - q * r$se; hi <- r$estimate + q * r$se; tr <- as.numeric(tv[[t]])
+    f <- if (type == "binary") exp else identity
+    data.frame(term = t, predictor = as.character(p$values[[t]]$name %||% t), true = f(tr), estimate = f(r$estimate), ci_low = f(lo), ci_high = f(hi),
+               covered = tr >= lo & tr <= hi, p = r$p, stringsAsFactors = FALSE)
+  })
+  do.call(rbind, Filter(Negate(is.null), rows))
 }

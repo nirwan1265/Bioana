@@ -78,8 +78,8 @@
   ids <- utils::head(fits$test[fits$auto == "yes" & fits$family == fam], 1)
   notes <- character()
   for (r in unique(unlist(c(design$spec$analysis$stat_tests, args$stat_tests)))) {
-    if (r %in% c("parametric", "nonparametric")) {
-      m <- fits$test[fits$auto == "yes" & fits$family == r]
+    if (r %in% c("parametric", "nonparametric", "robust")) {
+      m <- fits$test[(fits$auto == "yes" | r == "robust") & fits$family == r]
       if (length(m)) ids <- c(ids, m[1]) else notes <- c(notes, sprintf("no %s test fits this design", r))
     } else if (r %in% fits$test) ids <- c(ids, r)
     else notes <- c(notes, sprintf("requested test '%s' %s", r, if (r %in% rules$test) "does not fit this outcome and design" else "is not in stat_tests.tsv"))
@@ -93,9 +93,17 @@
     row <- rules[rules$test == id, , drop = FALSE]
     miss <- Filter(function(pk) !requireNamespace(pk, quietly = TRUE), strsplit(row$requires, ",", fixed = TRUE)[[1]])
     if (length(miss)) return(list(summary = list(status = "not run", test = id, note = sprintf("%s not installed", paste(miss, collapse = ", ")))))
-    tryCatch(if (startsWith(id, "anova_")) .ba_st_anova(row, frame, lay, p, design, goal, sr) else .ba_st_simple(row, frame, lay, p, design, sr, rules),
+    tryCatch(if (startsWith(id, "anova_")) .ba_st_anova(row, frame, lay, p, design, goal, sr)
+             else if (id %in% .ba_robust_ids) .ba_st_robust(row, frame, lay, p, design, sr) else .ba_st_simple(row, frame, lay, p, design, sr, rules),
              error = function(e) list(summary = list(status = "error", test = id, note = conditionMessage(e))))
   })
+  # extreme outliers in the primary test's checks: the robust test of the same layout next to it (stat_rules.json)
+  ext <- res[[1]]$summary$checks$extreme_outliers %||% 0
+  rob <- fits$test[fits$family == "robust"]
+  if (isTRUE(sr$robust_when_outliers) && isTRUE(ext > 0) && length(rob) && !any(ids %in% rob) && requireNamespace("WRS2", quietly = TRUE)) {
+    rr <- tryCatch(.ba_st_robust(rules[rules$test == rob[1], , drop = FALSE], frame, lay, p, design, sr), error = function(e) NULL)
+    if (!is.null(rr)) { rr$summary$note <- paste(c(sprintf("%d extreme outlier(s): the robust test is reported next to the primary one", ext), rr$summary$note), collapse = "; "); res <- c(res, list(rr)) }
+  }
   if (!is.null(gof)) res <- c(res, list(gof))
   key <- c(goal$tested_terms, goal$terms, lay$treat)
   res <- lapply(res, function(r) { r$summary <- .ba_stat_headline(r$summary, key); r })

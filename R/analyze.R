@@ -180,6 +180,7 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     if (!is.null(a$recovery_note)) cat(sprintf("      truth: %s\n", a$recovery_note))
     st <- a$stat_test
     if (!is.null(st)) for (x in c(list(st), st$also)) .ba_print_stat_test(x)
+    if (!is.null(a$regression)) .ba_print_regression(a$regression)
     if (a$data_type %in% c("traits", "ratings") && length(a$warnings)) cat(sprintf("      checks: %s\n", paste(a$warnings, collapse = "; ")))
     if (!is.null(a$within_design)) cat(sprintf("      %s\n", a$within_design))
 
@@ -279,5 +280,31 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   cat(sprintf("      cumulative incidence vs 1 - KM: %s\n",
               paste(vapply(st$cif_vs_naive, function(r) sprintf("%s at %g %.3f vs %.3f", r$group, r$time, r$cif, r$one_minus_km), ""), collapse = "; ")))
   if (!is.null(st$note)) cat(sprintf("      checks: %s\n", st$note))
+  invisible()
+}
+
+# Regression block of the report (R/regression.R summary).
+.ba_print_regression <- function(rg) {
+  if (!identical(rg$status, "run")) { cat(sprintf("      regression not run: %s\n", rg$note %||% "")); return(invisible()) }
+  f <- rg$fit
+  if (!is.null(f$r_squared)) cat(sprintf("      %s: F(%g, %g) = %.4g, p = %.3g, R2 = %.4f, adj R2 = %.4f, residual SE %.4g (n = %d)\n", rg$model, f$df1, f$df2, f$F, f$p, f$r_squared, f$adj_r_squared, f$sigma, rg$n))
+  else cat(sprintf("      %s: LR chi-squared(%g) = %.4g, p = %.3g, McFadden R2 %.3f, Nagelkerke R2 %.3f (n = %d, %d events)\n", rg$model, f$df, f$lr_chisq, f$p, f$mcfadden_r2, f$nagelkerke_r2, f$n, f$events))
+  for (c in rg$coefficients) {
+    if (c$term == "(Intercept)") next
+    if (!is.null(c$odds_ratio)) cat(sprintf("        %s: OR %.4g [%.4g, %.4g], p = %.3g\n", c$predictor, c$odds_ratio, c$or_ci_low, c$or_ci_high, c$p))
+    else cat(sprintf("        %s: b = %.4g [%.4g, %.4g], p = %.3g%s%s\n", c$predictor, c$estimate, c$ci_low, c$ci_high, c$p,
+                     if (!is.null(c$std_beta) && !is.na(c$std_beta)) sprintf(", beta %.3f", c$std_beta) else "",
+                     if (!is.null(c$p_hc3)) sprintf(" (HC3 p = %.3g)", c$p_hc3) else ""))
+  }
+  for (t in rg$interactions) cat(sprintf("        interaction %s: %s(%g) = %.4g, p = %.3g (nested test)\n", t$predictor, t$statistic_name, t$df, t$statistic, t$p))
+  if (!is.null(rg$ancova)) cat(sprintf("        ANCOVA: adjusted means of %s at the covariate mean%s\n", rg$ancova$factor,
+                                       if (!is.null(rg$ancova$equal_slopes_p)) sprintf("; equal slopes p = %.3g", rg$ancova$equal_slopes_p) else ""))
+  if (!is.null(rg$auc)) cat(sprintf("        AUC %.3f%s; Hosmer-Lemeshow p = %s; in-sample accuracy at 0.5: %.1f%%\n", rg$auc$auc,
+                                    if (!is.na(rg$auc$ci_low)) sprintf(" [%.3f, %.3f]", rg$auc$ci_low, rg$auc$ci_high) else "",
+                                    if (!is.null(rg$hosmer_lemeshow)) format(signif(rg$hosmer_lemeshow$p, 3)) else "NA", 100 * rg$classification$accuracy))
+  if (!is.null(rg$sensitivity$detectable_partial_f2)) cat(sprintf("        sensitivity: %.0f%% power at alpha %g for partial f2 >= %.3f (%s)\n", 100 * rg$sensitivity$power, rg$sensitivity$alpha,
+                                                                    rg$sensitivity$detectable_partial_f2, rg$sensitivity$cohen))
+  bad <- Filter(function(x) x$status %in% c("warn", "note"), rg$checks)
+  if (length(bad)) cat(sprintf("      checks: %s\n", paste(vapply(bad, `[[`, "", "detail"), collapse = "; ")))
   invisible()
 }

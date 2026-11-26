@@ -1,0 +1,21 @@
+{
+  "_about": "Regression layer (R/regression.R): runs when analysis.model has covariate terms (role covariate). Biodes may set analysis.regression = {predict_at: [{term or covariate name: value}], robust: none | mm, order_column: column for Durbin-Watson}. Checks are reported, never used to switch the model.",
+  "std_residual_cut": 3,
+  "_note_std_residual_cut": "|standardized residual| > 3: possible outlier (datanovia linear and logistic diagnostics)",
+  "cooks_numerator": 4,
+  "_note_cooks": "Cook's distance > 4/(n - p - 1) flags influence; > cooks_large is strong influence (the 0.5 contour of plot(model, 5))",
+  "cooks_large": 0.5,
+  "vif_cut": 5,
+  "vif_severe": 10,
+  "_note_vif": "VIF > 5 (lenient 10) problematic; factors: GVIF^(1/(2 df)) squared is compared",
+  "large_n": 100,
+  "sensitivity_power": 0.8,
+  "_note_sensitivity": "the partial f2 (and slope) detectable with this power at alpha given the residual df (pwr::pwr.f2.test); observed power is never reported (datanovia power page)",
+  "min_epv": 10,
+  "_note_min_epv": "logistic: events in the smaller outcome class per coefficient",
+  "separation_abs_coef": 10,
+  "hosmer_lemeshow_groups": 10,
+  "reference": "Fox & Weisberg 2019 An R Companion to Applied Regression (car); Cook 1977 Technometrics 19:15; Breusch & Pagan 1979 Econometrica 47:1287; Ramsey 1969 JRSS B 31:350; MacKinnon & White 1985 J Econometrics 29:305 (HC3); Hosmer & Lemeshow 2013 Applied Logistic Regression; Box & Tidwell 1962 Technometrics 4:531; Nagelkerke 1991 Biometrika 78:691; Cohen 1988 (f2); datanovia regression tutorials",
+  "influence_change_se": 0.5,
+  "_note_influence_change_se": "refit without the unit with the largest Cook's distance: a coefficient that moves more than this many standard errors is flagged (the change in % is reported too)"
+}

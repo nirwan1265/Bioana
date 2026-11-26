@@ -1,3 +1,23 @@
+# bioana 0.13.0
+
+Regression, robust tests and power (datanovia regression, power and robust pages; docs/contracts/regression.md):
+
+- Covariates: model terms `covariate`, `covariate2`, ... (or any term in `analysis.covariates`), numeric, read
+  from the sample metadata, with names, units and transforms. `R/read_design.R` changed: Simitall's copy
+  (`suite_handoff.R`) needs the same change.
+- Goal `regression`: the covariate slopes (Wald), scored against Simitall's `true_slopes` /
+  `true_log_odds_ratios`.
+- Regression layer (R/regression.R) for lm and logistic glm: coefficients with CIs, standardized betas, HC3
+  SEs, R2 / F or LR / pseudo R2, Type II tests, outliers, leverage, Cook's distance and a refit without the most
+  influential unit, Shapiro-Wilk, Breusch-Pagan, RESET, Durbin-Watson, VIF, interactions (nested test, simple
+  slopes), ANCOVA (equal slopes, adjusted means), predictions with confidence and prediction intervals,
+  Box-Tidwell, Hosmer-Lemeshow, AUC, events per variable, separation, sensitivity (detectable f2). Every
+  datanovia number reproduced (test-regression.R).
+- Robust tests (R/robust.R, WRS2): Yuen, paired Yuen, t1way + lincon, t2way, rmanova + rmmcp, bwtrim; on
+  request or next to a primary test with extreme outliers. Robust correlations (percentage bend, winsorized),
+  MM regression on request.
+- Power stays with Biodes (a-priori) and Simitall (by simulation); Bioana reports sensitivity, never observed power.
+
 # bioana 0.12.1
 
 - Correlation method marked "assumed by Biodes" when `assumptions["analysis.correlation.method"]` is set.

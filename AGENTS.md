@@ -319,6 +319,13 @@ Open on the other side:
 - Biodes: nominal and paired binary designs as RCBD with blocks of 2 (150 blocks): fine for Bioana now (random or
   dropped block, stratified test), but a CRD or `paired: true` says what is meant.
 
+## Regression handoff (0.13.0, 2026-11-26; tell Biodes and Simitall)
+
+Contract: docs/contracts/regression.md. `R/read_design.R` now looks up covariate terms in the sample metadata
+and marks them numeric (`.ba_parse_model(..., meta =)`, role covariate from `model_terms.json` and
+`analysis.covariates`): Simitall's `suite_handoff.R` copy needs the same change. Power is Biodes' (pwr,
+a-priori) and Simitall's (simulation); Bioana reports sensitivity only.
+
 ## Next
 
 The checklist is "Future analyses to check" in README.md. In short: wire the
