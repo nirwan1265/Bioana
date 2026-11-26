@@ -116,7 +116,8 @@
   notes <- c(if (length(extra)) sprintf("ANOVA crosses all factors; analysis.model has no %s", paste(extra, collapse = ", ")),
              if (length(lay$random_blocks)) sprintf("random block intercept %s entered as an additive block (same F for balanced data)", paste(lay$random_blocks, collapse = ", ")),
              if (isTRUE(lay$replicated)) sprintf("several observations per %s cell: averaged by afex", idv))
-  ph_res <- .ba_posthoc(fit, lay, p, goal, design$spec$analysis$posthoc, ph)
+  orig <- lapply(stats::setNames(c(lay$between, lay$within), c(lay$between, lay$within)), function(v) levels(droplevels(factor(frame[[v]]))))
+  ph_res <- .ba_posthoc(fit, lay, p, goal, design$spec$analysis$posthoc, ph, orig)
   chk <- .ba_anova_checks(fit, d, lay, ph$outlier_iqr %||% 3, p)
   rows <- lapply(seq_len(nrow(tab)), function(i) c(list(term = rownames(tab)[i]), as.list(tab[i, ])))
   list(summary = list(status = "run", test = row$test, layout = lay$layout, package = "afex", version = as.character(utils::packageVersion("afex")),
@@ -165,15 +166,21 @@
 
 # Post-hoc comparisons: which families from the goal (stat_rules.json families), adjustment from stat_rules.json or
 # analysis.posthoc. emmeans on the afex fit; multivariate model for within-subject contrasts.
-.ba_posthoc <- function(fit, lay, p, goal, req, ph) {
+.ba_posthoc <- function(fit, lay, p, goal, req, ph, orig = list()) {
   type <- req$type %||% ph$posthoc_type %||% "pairwise"
   if (identical(type, "none")) return(list(summary = list(status = "not run", note = "analysis.posthoc.type = none")))
   facs <- c(lay$between, lay$within)
   treat <- facs[vapply(facs, function(v) identical(p$role[[v]] %||% "treatment", "treatment"), logical(1))]
   gid <- goal$id %||% "treatment_effect"
-  fam <- list()
+  fam <- list(); pnote <- character()
   if (identical(gid, "trend")) return(list(summary = list(status = "not run", note = "goal trend: the slope is the test")))
-  if (identical(gid, "time_course") && "time" %in% facs) {
+  fv <- .ba_posthoc_factor(req, p, treat)
+  if (is.character(fv) && nzchar(fv) && !fv %in% treat) { pnote <- c(pnote, fv); fv <- NULL }
+  if (!is.null(fv) && fv %in% treat) {
+    # Biodes analysis.posthoc.factor: that factor, and within each level of a treatment factor it interacts with
+    fam <- list(list(specs = fv, by = NULL))
+    for (w in setdiff(treat, fv)) if (any(vapply(p$fixed_labels, function(l) all(c(fv, w) %in% all.vars(str2lang(l))), logical(1)))) fam <- c(fam, list(list(specs = fv, by = w)))
+  } else if (identical(gid, "time_course") && "time" %in% facs) {
     grp <- setdiff(treat, "time")
     fam <- if (length(grp)) list(list(specs = "time", by = grp[1])) else list(list(specs = "time", by = NULL))
   } else if (identical(gid, "interaction")) {
@@ -188,12 +195,20 @@
   if (!length(fam)) return(list(summary = list(status = "not run", note = "no treatment factor to compare")))
   adj <- req$adjust %||% if (identical(type, "vs_control")) ph$adjust_vs_control %||% "dunnettx" else ph$adjust %||% "holm"
   emm_model <- ph$emmeans_model %||% "multivariate"
-  out <- list()
+  out <- list(); ctrl <- list()
   for (fm in fam) {
     sp <- if (is.null(fm$by)) stats::as.formula(paste("~", fm$specs)) else stats::as.formula(sprintf("~ %s | %s", fm$specs, fm$by))
     em <- suppressMessages(emmeans::emmeans(fit, sp, model = emm_model))
+    # afex passes within-subject level labels through make.names ("week 1" -> "week.1"): back to the design's labels
+    lv <- levels(em)
+    for (v in intersect(names(lv), names(orig))) if (length(orig[[v]]) == length(lv[[v]]) && all(make.names(orig[[v]]) == lv[[v]] | orig[[v]] == lv[[v]])) lv[[v]] <- orig[[v]]
+    byv <- em@misc$by.vars
+    levels(em) <- lv                                   # drops the by grouping: set it again
+    if (length(byv)) em <- stats::update(em, by = byv)
     ct <- if (identical(type, "vs_control")) {
-      lev <- levels(fit$data$long[[fm$specs]]); ref <- match(req$control %||% lev[1], lev); if (is.na(ref)) ref <- 1L
+      lev <- levels(em)[[fm$specs]]; ref <- match(req$control %||% lev[1], lev)
+      if (is.na(ref)) { pnote <- c(pnote, sprintf("control '%s' is not a level of %s: first level '%s' used", req$control, fm$specs, lev[1])); ref <- 1L }
+      ctrl[[fm$specs]] <- lev[ref]
       emmeans::contrast(em, "trt.vs.ctrl", ref = ref)
     } else graphics::pairs(em)
     s_adj <- as.data.frame(summary(ct, adjust = adj)); s_raw <- as.data.frame(summary(ct, adjust = "none"))
@@ -206,8 +221,10 @@
   }
   tab <- do.call(rbind, out)
   list(summary = list(status = "run", package = "emmeans", version = as.character(utils::packageVersion("emmeans")), type = type,
-                      adjust = adj, emmeans_model = emm_model, families = as.list(unique(tab$family)),
-                      n_comparisons = nrow(tab), n_significant = sum(tab$p_adj < 0.05, na.rm = TRUE)),
+                      adjust = adj, emmeans_model = emm_model, families = as.list(unique(tab$family)), control = if (length(ctrl)) ctrl,
+                      specs = lapply(fam, function(f) list(specs = f$specs, by = f$by)), requested_by = if (!is.null(req$type)) "analysis.posthoc",
+                      n_comparisons = nrow(tab), n_significant = sum(tab$p_adj < 0.05, na.rm = TRUE),
+                      note = if (length(pnote)) paste(unique(pnote), collapse = "; ")),
        table = tab)
 }
 
@@ -339,6 +356,10 @@
                        statistic = NA_real_, p = pf$p, p_adj = pf$p.adj, adjust = adj, stringsAsFactors = FALSE)
     }
   } else stop(sprintf("no adapter for stat test '%s'", id))
+  if (!is.null(ph)) {
+    f <- .ba_posthoc_select(ph, req, lev, adj, sr)
+    ph <- f$table; if (length(f$note)) notes <- c(notes, f$note)
+  }
   pk <- strsplit(row$requires, ",", fixed = TRUE)[[1]][1]
   list(summary = c(list(status = "run", test = id, name = row$model, layout = lay$layout, package = pk, version = as.character(utils::packageVersion(pk)),
                         call = row$calls, factor = tv, levels = as.list(lev), table = lapply(seq_len(nrow(flat)), function(i) as.list(flat[i, ])),
@@ -400,4 +421,57 @@
                               report = if (is.finite(sk) && abs(sk) > (sr$skew_report_median %||% 1)) "median (IQR)" else "mean (SD)")), stringsAsFactors = FALSE)
   })
   do.call(rbind, out)
+}
+
+# Biodes analysis.posthoc.factor (a spec factor name or model term) -> model term; NULL when not given;
+# a character note when it names nothing in the model.
+.ba_posthoc_factor <- function(req, p, treat) {
+  f <- req$factor
+  if (is.null(f)) return(NULL)
+  hit <- treat[vapply(treat, function(v) identical(v, f) || identical(as.character(p$col[[v]]), f), logical(1))]
+  if (length(hit)) hit[1] else sprintf("analysis.posthoc.factor '%s' is not a treatment factor of the model: default comparisons", f)
+}
+
+# Post-hoc after rank and proportion tests: analysis.posthoc type none drops it; vs_control keeps the
+# comparisons with the control and adjusts again over those (Holm; dunnettx is an emmeans method).
+.ba_posthoc_select <- function(ph, req, lev, adj, sr) {
+  type <- req$type %||% sr$posthoc_type %||% "pairwise"
+  if (identical(type, "none")) return(list(table = NULL, note = "analysis.posthoc type none: no post-hoc"))
+  if (!identical(type, "vs_control")) return(list(table = ph))
+  ctrl <- req$control %||% lev[1]; note <- character()
+  if (!ctrl %in% lev) { note <- sprintf("control '%s' is not a level: '%s' used", ctrl, lev[1]); ctrl <- lev[1] }
+  parts <- strsplit(ph$contrast, " - ", fixed = TRUE)
+  keep <- vapply(parts, function(x) ctrl %in% x, logical(1))
+  ph <- ph[keep, , drop = FALSE]
+  a <- if (adj %in% stats::p.adjust.methods) adj else "holm"
+  if (nrow(ph) && !all(is.na(ph$p))) { ph$p_adj <- stats::p.adjust(ph$p, a); ph$adjust <- a }
+  list(table = ph, note = c(note, sprintf("comparisons with the control '%s' only", ctrl)))
+}
+
+# Post-hoc contrasts (emmeans) against Simitall's truth: the same emmeans contrasts on a saturated lm of the
+# true cell means of the treatment factors (equal weights over the other factors, as for the estimates).
+.ba_posthoc_recovery <- function(ph, phs, truth, frame, alpha) {
+  facs <- unique(unlist(lapply(phs$specs, function(s) c(s$specs, s$by))))
+  if (!length(facs) || !all(facs %in% names(frame))) return(NULL)
+  grid <- expand.grid(lapply(frame[facs], function(x) levels(droplevels(factor(x)))), stringsAsFactors = TRUE)
+  grid$true_ <- .ba_true_cell_means(truth, grid)
+  tl <- stats::lm(stats::reformulate(paste(facs, collapse = " * "), response = "true_"), data = grid)
+  tru <- do.call(rbind, lapply(phs$specs, function(s) {
+    sp <- if (is.null(s$by)) stats::as.formula(paste("~", s$specs)) else stats::as.formula(sprintf("~ %s | %s", s$specs, s$by))
+    em <- suppressMessages(suppressWarnings(emmeans::emmeans(tl, sp)))
+    ct <- if (identical(phs$type, "vs_control")) emmeans::contrast(em, "trt.vs.ctrl", ref = match(phs$control[[s$specs]] %||% levels(grid[[s$specs]])[1], levels(grid[[s$specs]])))
+          else graphics::pairs(em)
+    x <- suppressWarnings(as.data.frame(summary(ct, adjust = "none")))
+    data.frame(family = if (is.null(s$by)) s$specs else sprintf("%s | %s", s$specs, s$by), by = if (is.null(s$by)) NA_character_ else as.character(x[[s$by]]),
+               contrast = as.character(x$contrast), true = x$estimate, stringsAsFactors = FALSE)
+  }))
+  key <- function(d) paste(d$family, ifelse(is.na(d$by), "", d$by), d$contrast, sep = "\r")
+  ph$true <- tru$true[match(key(ph), key(tru))]
+  ok <- !is.na(ph$true)
+  if (!any(ok)) return(NULL)
+  q <- stats::qt(1 - alpha / 2, ph$df[ok])
+  covered <- abs(ph$estimate[ok] - ph$true[ok]) <= q * ph$se[ok]
+  nz <- abs(ph$true[ok]) > 1e-9; sig <- ph$p_adj[ok] < alpha
+  list(table = ph, summary = list(n = sum(ok), covered = sum(covered), coverage = round(mean(covered), 3), nominal = 1 - alpha,
+                                  true_nonzero = sum(nz), detected = sum(sig & nz), true_zero = sum(!nz), false_calls = sum(sig & !nz)))
 }

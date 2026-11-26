@@ -1,8 +1,8 @@
 # Classical ANOVA next to the model (R/stat_tests.R): equality with rstatix, base aov, car, paired t-tests.
 
-rm_folder <- function(mixed = TRUE, drop_one = FALSE, posthoc = NULL, seed = 3) {
+rm_folder <- function(mixed = TRUE, drop_one = FALSE, posthoc = NULL, seed = 3, days = c("d0", "d7", "d14", "d21")) {
   d <- file.path(tempfile("rm_"), "design"); dir.create(d, recursive = TRUE)
-  days <- c("d0", "d7", "d14", "d21"); n <- 8
+  n <- 8
   plants <- sprintf("P%02d", seq_len(if (mixed) 2 * n else n))
   water <- if (mixed) rep(c("well-watered", "drought"), each = n) else rep("well-watered", n)
   set.seed(seed)
@@ -117,4 +117,55 @@ test_that("a subject with a missing day: ANOVA not run (would drop it), the mixe
   tab <- bioana:::.ba_anova_corrected(fit, "girden", 0.75)
   eps <- suppressWarnings(summary(fit$Anova, multivariate = FALSE))$pval.adjustments["day", "GG eps"]
   expect_equal(tab$correction, if (eps > 0.75) "HF" else "GG")
+})
+
+test_that("Biodes analysis.posthoc: vs_control on an exact within-subject label with spaces, the named factor only; post-hoc truth from Simitall", {
+  skip_if_not_installed("afex"); skip_if_not_installed("emmeans")
+  days <- c("week 1", "week 2", "week 4", "week 8")
+  f <- rm_folder(mixed = TRUE, days = days, posthoc = list(type = "vs_control", control = "week 1", factor = "day"))
+  te <- list(treatment = list(`well-watered` = 0, drought = -2), time = stats::setNames(as.list(c(0, 2, 4, 5)), days))
+  cells <- c(stats::setNames(as.list(c(0, -1, -3, -5)), paste0("drought:", days)), stats::setNames(as.list(rep(0, 4)), paste0("well-watered:", days)))
+  jsonlite::write_json(list(intercept = 20, treatment_effects = te, interaction_effects = list(`treatment:time` = list(cells = cells)),
+                            within_subject = list(structure = "ar1", rho = 0.8, over = "day")),
+                       file.path(f$dir, "sim_truth.json"), auto_unbox = TRUE, pretty = TRUE)
+  m <- jsonlite::read_json(file.path(f$dir, "data_manifest.json"))
+  m$data[[1]]$truth <- list(kind = "outcome", file = "sim_truth.json"); jsonlite::write_json(m, file.path(f$dir, "data_manifest.json"), auto_unbox = TRUE, pretty = TRUE)
+  out <- utils::capture.output(r <- bioana_analyze(f$dir, secondary = FALSE))
+  ph <- r$summary$analyses$outcome$stat_test$posthoc
+  expect_equal(ph$type, "vs_control"); expect_equal(ph$control$time, "week 1")
+  expect_equal(unlist(ph$families), c("time", "time | treatment"))
+  expect_equal(ph$n_comparisons, 3 + 6)
+  tab <- utils::read.delim(file.path(f$dir, "bioana", "outcome", "posthoc.tsv"))
+  expect_true(all(grepl("- week 1$", tab$contrast)))
+  # true contrast of week 8 vs week 1 averaged over water: 5 + mean(-5, 0) = 2.5
+  expect_equal(tab$true[tab$family == "time" & grepl("^week 8", tab$contrast)], 2.5)
+  expect_equal(tab$true[tab$family == "time | treatment" & tab$by == "drought" & grepl("^week 8", tab$contrast)], 0)
+  expect_equal(ph$recovery$n, 9)
+  expect_true(any(grepl("sphericity truth: Simitall planted ar1 \\(rho 0.8\\)", out)))
+})
+
+test_that("rank tests: vs_control keeps the control comparisons and adjusts again; none drops the post-hoc", {
+  skip_if_not_installed("rstatix")
+  mk <- function(ph) {
+    d <- file.path(tempfile("kw_"), "design"); dir.create(d, recursive = TRUE)
+    set.seed(2); g <- data.frame(dose = rep(c("0 mM", "50 mM", "100 mM", "150 mM"), each = 8), stringsAsFactors = FALSE)
+    g$primary_outcome <- as.integer(cut(rep(0:3, each = 8) + stats::rnorm(32), 5)); g$sample_id <- sprintf("S%02d", 1:32)
+    spec <- list(handoff_version = "0.6.5", origin = "observed", organism = "test", system = "lab",
+                 factors = list(list(name = "salt", n_levels = 4L, levels = list("0 mM", "50 mM", "100 mM", "150 mM"))),
+                 design = list(chosen = "crd", reps = 8L), primary_outcome = list(name = "score", type = "ordinal"),
+                 analysis = list(model = "y ~ treatment", terms = list(treatment = "salt", layout_columns = list("salt")), posthoc = ph))
+    names(g)[1] <- "salt"
+    jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+    utils::write.csv(g[, c("sample_id", "salt")], file.path(d, "field_layout.csv"), row.names = FALSE)
+    utils::write.table(g, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+    bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome"))
+    utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); list(st = r$summary$analyses$outcome$stat_test, dir = d)
+  }
+  a <- mk(list(type = "vs_control", control = "0 mM", factor = "salt"))
+  expect_equal(a$st$test, "kruskal_wallis")
+  tab <- utils::read.delim(file.path(a$dir, "bioana", "outcome", "posthoc.tsv"))
+  expect_equal(nrow(tab), 3); expect_true(all(grepl("0 mM", tab$contrast)))
+  expect_equal(tab$p_adj, stats::p.adjust(tab$p, "holm"))
+  b <- mk(list(type = "none"))
+  expect_null(b$st$posthoc); expect_match(b$st$note, "no post-hoc")
 })

@@ -200,9 +200,16 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
                 if (!is.na(r$effect)) sprintf(", %s %.2f%s", r$effect_name, r$effect, if (!is.null(st$magnitude)) paste0(" (", st$magnitude, ")") else "") else ""))
   }
   ph <- st$posthoc
-  if (identical(ph$status, "run")) cat(sprintf("      post-hoc%s %s: %d comparisons (%s), %d with adjusted p < 0.05\n",
-    if (!is.null(ph$version)) sprintf(" [emmeans %s]", ph$version) else "", paste(unlist(ph$families), collapse = ", "), ph$n_comparisons, ph$adjust, ph$n_significant))
-  w <- c(st$checks$warnings, st$note)
+  if (identical(ph$status, "run")) cat(sprintf("      post-hoc%s %s%s: %d comparisons (%s), %d with adjusted p < 0.05\n",
+    if (!is.null(ph$version)) sprintf(" [emmeans %s]", ph$version) else "", paste(unlist(ph$families), collapse = ", "),
+    if (identical(ph$type, "vs_control")) sprintf(" vs %s", paste(unlist(ph$control), collapse = ", ")) else "", ph$n_comparisons, ph$adjust, ph$n_significant))
+  if (!is.null(ph$recovery)) cat(sprintf("      post-hoc truth: %d/%d true differences in their 95%% CI; %d/%d non-zero differences found, %d/%d zero differences called\n",
+    ph$recovery$covered, ph$recovery$n, ph$recovery$detected, ph$recovery$true_nonzero, ph$recovery$false_calls, ph$recovery$true_zero))
+  ws <- st$truth_within_subject
+  if (!is.null(ws) && length(st$sphericity)) cat(sprintf("      sphericity truth: Simitall planted %s%s; Mauchly p = %s, GG epsilon = %s\n", ws$structure,
+    if (!is.null(ws$rho)) sprintf(" (rho %g)", ws$rho) else if (!is.null(ws$slope_sd)) sprintf(" (slope sd %g)", ws$slope_sd) else "",
+    paste(signif(vapply(st$sphericity, `[[`, 0, "mauchly_p"), 3), collapse = ", "), paste(signif(vapply(st$sphericity, `[[`, 0, "gg_epsilon"), 3), collapse = ", ")))
+  w <- c(st$checks$warnings, st$note, ph$note)
   if (length(w)) cat(sprintf("      checks: %s\n", paste(w, collapse = "; ")))
   invisible()
 }

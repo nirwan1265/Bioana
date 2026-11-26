@@ -164,6 +164,9 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
   (AR(1) / random slope) recorded in sim_truth.json. Neither blocks: Bioana runs without them.
 - 2026-11-26 tests on one factor (0.9.0): asks Biodes for optional `analysis.stat_tests` (test ids or
   "nonparametric") and to write scores/ratings as `primary_outcome.type = "ordinal"`.
+- Biodes 0.6.5 (8a4f55f) `analysis.posthoc.factor` and Simitall 6d1e79e `within_subject` read (0.9.1).
+  Note for Simitall: it keys repeated units on every layout column but the occasion; a layout with a
+  per-sample column (sample_id) makes every unit unique and turns within_subject off silently.
 
 ## Packages
 

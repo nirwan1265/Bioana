@@ -135,6 +135,16 @@
                   warnings = warn)
   truth <- .ba_entry_truth(entry, design$dir)
   rec <- NULL
+  if (!is.null(truth) && identical(st$summary$status, "run")) {
+    if (!is.null(st$posthoc) && identical(st$summary$posthoc$package, "emmeans") && type == "continuous") {
+      pr <- tryCatch(.ba_posthoc_recovery(st$posthoc, st$summary$posthoc, truth, frame, alpha), error = function(e) NULL)
+      if (!is.null(pr)) {
+        summary$stat_test$posthoc$recovery <- pr$summary
+        paths[["posthoc"]] <- .ba_write_tsv(pr$table, file.path(outdir, "posthoc.tsv"))
+      }
+    }
+    if (!is.null(truth$within_subject)) summary$stat_test$truth_within_subject <- truth$within_subject[intersect(c("structure", "rho", "slope_sd", "over"), names(truth$within_subject))]
+  }
   if (!is.null(truth) && !is.null(entry$truth$goal)) {
     gt <- truth[[entry$truth$goal$field %||% "goal_truth"]]
     if (!is.null(gt)) summary$goal_recovery <- .ba_goal_recovery_outcome(gt, summary$goal, res, alpha, type)
@@ -189,6 +199,24 @@
 
 # True treatment coefficients (Gaussian scale) under the model's parametrisation: fit the fixed
 # treatment part of the model to the noise-free treatment means written in sim_truth.json.
+# True cell means from Simitall's truth (intercept, treatment, numeric and interaction effects) on a grid.
+.ba_true_cell_means <- function(truth, grid) {
+  fv <- names(truth$treatment_effects); nv <- names(truth$numeric_effects)
+  tv <- intersect(c(fv, nv), names(grid))
+  mu <- rep(as.numeric(truth$intercept %||% 0), nrow(grid))
+  for (v in intersect(fv, tv)) mu <- mu + unlist(truth$treatment_effects[[v]])[as.character(grid[[v]])]
+  for (v in intersect(nv, tv)) mu <- mu + as.numeric(truth$numeric_effects[[v]]) * grid[[v]]
+  for (it in names(truth$interaction_effects)) {
+    ie <- truth$interaction_effects[[it]]
+    vars <- all.vars(str2lang(it))
+    if (!is.list(ie) || !all(vars %in% names(grid))) next
+    key <- do.call(paste, c(lapply(vars, function(v) as.character(grid[[v]])), sep = ":"))
+    v <- unlist(ie$cells)[key]
+    mu <- mu + ifelse(is.na(v), 0, v)
+  }
+  unname(mu)
+}
+
 .ba_true_coefs <- function(truth, frame, p) {
   fv <- names(truth$treatment_effects); nv <- names(truth$numeric_effects)
   tv <- intersect(c(fv, nv), names(frame))

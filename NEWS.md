@@ -1,3 +1,15 @@
+# bioana 0.9.1
+
+- Biodes 0.6.5 `analysis.posthoc` with `factor`: post-hoc on that factor (and within each level of a factor
+  it interacts with); exact control labels, including within-subject labels with spaces (afex's make.names
+  labels mapped back; emmeans `by` kept). After rank and proportion tests `vs_control` keeps the control
+  comparisons and adjusts again; `none` drops the post-hoc.
+- Post-hoc truth: emmeans contrasts on Simitall's true cell means; `posthoc.tsv` `true` column, coverage and
+  detection in `stat_test$posthoc$recovery`.
+- Simitall 6d1e79e `within_subject` (AR(1), random slope) shown next to Mauchly's test and the GG epsilon.
+  Check run, 30 plants x 4 weeks: random intercept -> Mauchly p 0.31, epsilon 0.88; AR(1) rho 0.7 -> Mauchly
+  p 0.014, epsilon 0.75; post-hoc truth 9/9 in their CI in both.
+
 # bioana 0.9.0
 
 - Tests on one treatment factor next to the model (`stat_tests.tsv` now has condition columns: outcome type,
