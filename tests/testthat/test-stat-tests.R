@@ -188,4 +188,5 @@ test_that("adjustment factors (Biodes analysis.adjust_for / factors[].role adjus
   expect_true(all(c("treatment", "treatment2") %in% vapply(st$table, `[[`, "", "term")))
   expect_equal(unlist(st$posthoc$families), "treatment")
   expect_match(st$posthoc$note, "adjustment factor")
+  expect_equal(unlist(r$summary$analyses$outcome$goal$tested_terms), "treatment")   # the goal tests diet only (Simitall a1503f4)
 })

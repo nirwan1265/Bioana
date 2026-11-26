@@ -73,7 +73,7 @@ bioana_goals <- function() {
   none <- is.null(args$goal) && (("goals" %in% names(a) && !length(listed)) || (no_terms && !length(listed)))
   list(id = id, source = src, assumed = assumed && src == "study_spec", assumed_why = if (assumed && src == "study_spec") why,
        terms = unlist(a$goal_terms[[id]]), effect = eff, listed = listed, note = if (length(note)) paste(note, collapse = "; "),
-       unknown_to_biodes = unknown_to_biodes, none = none)
+       unknown_to_biodes = unknown_to_biodes, none = none, adjust = .ba_adjust_vars(pv, design$spec))
 }
 
 # time_course within one group (goal_effect.time_course group / group_factor): the model term and level,
@@ -153,7 +153,12 @@ bioana_goals <- function() {
   ct <- col_term[cols]
   treat <- cols[vapply(cols, function(t) .ba_coef_role(t, p), "") == "treatment"]
   if (id %in% c("treatment_effect", "association", "survival")) {
-    return(list(test = "wald", coefs = treat, drop = character(), drop_terms = character(), label = NULL, tested_terms = unique(ct[treat])))
+    # Biodes goal_terms (e.g. ["treatment"]): exactly those terms; adjustment factors (analysis.adjust_for,
+    # factors[].role adjustment) are never part of the goal (Biodes 412c0e6, Simitall a1503f4)
+    adj_term <- vapply(ct[treat], function(t) any(all.vars(str2lang(t)) %in% goal$adjust), logical(1))
+    k <- treat[!adj_term]
+    if (length(goal$terms)) { kk <- k[ct[k] %in% goal$terms]; if (length(kk)) k <- kk }
+    return(list(test = "wald", coefs = k, drop = character(), drop_terms = character(), label = NULL, tested_terms = unique(ct[k])))
   }
   if (id == "interaction") {
     tt <- goal$terms

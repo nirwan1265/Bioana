@@ -1,3 +1,9 @@
+# bioana 0.13.5
+
+- Treatment-effect goal: tests exactly `goal_terms` when given, never an adjustment factor (Simitall report: the
+  mice prompt "adjusting for sex and baseline body weight" tested diet and sex jointly). Now `tested_terms`
+  = ["treatment"], matching Simitall a1503f4's `model_terms`.
+
 # bioana 0.13.4
 
 - Biodes 412c0e6 adjustment factors (`analysis.adjust_for`, `factors[].role: "adjustment"`): kept in the model
