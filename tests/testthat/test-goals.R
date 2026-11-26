@@ -145,7 +145,9 @@ trend_folder <- function(factor_extra = list(), effect = NULL, truth_x = NULL, s
   utils::write.table(grid, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
   e <- list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome")
   if (!is.null(truth_x)) {
-    jsonlite::write_json(list(intercept = 5, goal_truth = list(goal = "trend", model_terms = list("treatment"), status = "planted", true_effect = 0.8,
+    # the shape Simitall writes for a trend: per-level effects on the predictor plus goal_truth
+    jsonlite::write_json(list(intercept = 5, treatment_effects = list(treatment = stats::setNames(as.list(0.8 * truth_x), lev)),
+                              numeric_effects = list(), block_effects = list(), random_sd = list(), residual_sd = 0.3, goal_truth = list(goal = "trend", model_terms = list("treatment"), status = "planted", true_effect = 0.8,
                                                                values = as.list(val), x = as.list(truth_x), scale = "log")),
                          file.path(d, "sim_truth.json"), auto_unbox = TRUE, pretty = TRUE)
     e$truth <- list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "trend", field = "goal_truth", terms = list("treatment"), test = "wald"))
@@ -166,6 +168,7 @@ test_that("trend: level labels mapped to values, log10(x + log_offset) from the 
   gr <- r$summary$analyses$outcome$goal_recovery
   expect_true(gr$scored); expect_true(gr$terms_match); expect_true(gr$predictor_match)
   expect_true(gr$detected); expect_true(gr$covered); expect_equal(gr$true_effect, 0.8)
+  expect_null(r$summary$analyses$outcome$recovery)   # no per-level truth under a numeric term
 })
 
 test_that("trend without log_base / log_offset uses goal_rules.json; a different planted predictor is flagged", {
@@ -204,6 +207,8 @@ within_folder <- function(seed = 11, G = 150) {
   dir.create(file.path(d, "truth"))
   utils::write.table(data.frame(feature_id = sprintf("g%03d", 1:20), term = "treatment:time", effect = 1.5, change = 1.5),
                      file.path(d, "truth", "rna_goal.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  utils::write.table(data.frame(feature_id = sprintf("g%03d", 21:30), condition = "mutant", effect = 0),
+                     file.path(d, "truth", "rna.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
   gt <- list(goal = "time_course", model_terms = list("treatment:time"), status = "planted", scope = "within_group",
              groups_changing = list("mutant"), group_reference = "wt", true_effect = 2)
   jsonlite::write_json(list(intercept = 10, goal_truth = gt), file.path(d, "sim_truth.json"), auto_unbox = TRUE, pretty = TRUE)
@@ -211,7 +216,8 @@ within_folder <- function(seed = 11, G = 150) {
     list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "primary_outcome",
          truth = list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "time_course", field = "goal_truth", terms = list("treatment:time"), test = "lrt"))),
     list(id = "rna", data_type = "feature_counts", assay = "rnaseq", files = list(counts = "counts.tsv"),
-         truth = list(goal = list(goal = "time_course", file = "truth/rna_goal.tsv", term = "treatment:time", effect_scale = "log2 largest change"))))
+         truth = list(kind = "features", file = "truth/rna.tsv", term = "treatment", large = 1,
+                      goal = list(goal = "time_course", file = "truth/rna_goal.tsv", term = "treatment:time", effect_scale = "log2 largest change"))))
   list(dir = d, grid = grid, counts = cnt)
 }
 
@@ -239,6 +245,7 @@ test_that("goal recovery for count features: share of Simitall's goal genes foun
   gr <- a$goal_recovery
   expect_true(gr$terms_match); expect_equal(gr$n_goal_features, 20)
   expect_gt(gr$tpr, 0.8); expect_lt(gr$called_outside_goal, 10)
+  expect_equal(gr$called_other_planted + gr$called_not_planted, gr$called_outside_goal)
   # the reference level is mutant, so DESeq2's LRT drops the time columns of mutant
   cd <- data.frame(treatment = factor(w$grid$genotype, levels = c("mutant", "wt")), time = factor(w$grid$time, levels = c("0", "6", "24")))
   X <- stats::model.matrix(~ treatment * time, cd)

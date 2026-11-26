@@ -1,3 +1,11 @@
+# bioana 0.7.4
+
+- Trend goals on simulated data: the per-level truth check is skipped (it crashed on a numeric term:
+  "0 (non-NA) cases"); the slope is scored by `goal_recovery`. Same for features: no per-level "found 0/100".
+- `goal_recovery` for features splits calls outside the goal set into `called_other_planted` (Simitall's
+  other effects) and `called_not_planted`, with `false_call_rate`.
+- Checked against Simitall 279be4b (trend predictor fixed in 847cf84): `predictor_match = TRUE`.
+
 # bioana 0.7.3
 
 - Models with no fixed terms (`y ~ (1 | entry)`, p-rep catalog) no longer fail: every fixed-part formula is

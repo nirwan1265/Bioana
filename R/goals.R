@@ -267,6 +267,14 @@ bioana_goals <- function() {
   out$n_goal_features <- length(goal_ids); out$n_tested <- length(tested)
   out$found <- sum(sig[tested]); out$tpr <- if (length(tested)) mean(sig[tested]) else NA_real_
   out$n_called <- sum(sig); out$called_outside_goal <- sum(sig[setdiff(names(sig), goal_ids)])
+  # split the rest: features Simitall planted with another effect (truth.file) vs features with no planted effect
+  of <- file.path(dir, entry$truth$file %||% "")
+  if (!is.null(entry$truth$file) && file.exists(of)) {
+    other <- setdiff(unique(utils::read.delim(of, stringsAsFactors = FALSE)$feature_id), goal_ids)
+    out$called_other_planted <- sum(sig[intersect(names(sig), other)])
+    out$called_not_planted <- sum(sig[setdiff(names(sig), c(goal_ids, other))])
+    out$false_call_rate <- if (out$n_called) out$called_not_planted / out$n_called else 0
+  }
   out$effect_scale <- tg$effect_scale
   if (identical(g$test, "wald") && length(unlist(g$coefficients)) == 1L && !isFALSE(out$predictor_match) && "effect" %in% names(tf)) {
     m <- rows[match(tested, rows$feature_id), , drop = FALSE]; e <- tf$effect[match(tested, tf$feature_id)]

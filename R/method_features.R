@@ -23,8 +23,8 @@
   if (!is.null(entry$truth$goal) && !is.null(ft$summary$goal)) {
     ft$summary$goal_recovery <- .ba_goal_recovery_features(entry, design$dir, ft$summary$goal, ft$table, alpha)
   }
-  if (!is.null(truth) && identical(ft$summary$goal$test, "lrt")) {
-    # the condition contrasts are not tested under a joint goal test; the goal is scored by goal_recovery
+  if (!is.null(truth) && (identical(ft$summary$goal$test, "lrt") || identical(ft$summary$goal$id, "trend"))) {
+    # the condition contrasts are not in a joint test or a trend (numeric) model; the goal is scored by goal_recovery
     truth <- NULL
   }
   if (!is.null(truth)) {

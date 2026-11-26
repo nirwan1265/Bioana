@@ -147,7 +147,11 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
   (features); outcome goals give `detected`.
 - Open with Simitall (fa37c0c): `.suite_trend_x` puts a zero dose one decade below the
   smallest positive value; the agreed predictor is `log10(x + log_offset)`.
-  `goal_recovery$predictor_match` is FALSE until that changes.
+  `goal_recovery$predictor_match` is FALSE until that changes. Fixed in Simitall 847cf84
+  (checked at 279be4b: x = 0, 0.301, 1.041, 2.004, predictor_match TRUE).
+- Open with Simitall: `simulate_rnaseq_experiment` defaults `n_latent = 2`, `latent_effect_sd = 0.2`,
+  not in `simulator_parameters.tsv` nor in `sim_truth.json`. In a 16-sample dose design they made
+  132 of 237 DESeq2 calls genes with no planted effect (7 with `n_latent = 0`).
 
 ## Packages
 

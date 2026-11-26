@@ -128,6 +128,8 @@
     gt <- truth[[entry$truth$goal$field %||% "goal_truth"]]
     if (!is.null(gt)) summary$goal_recovery <- .ba_goal_recovery_outcome(gt, summary$goal, res, alpha, type)
   }
+  # a numeric (trend) term has no per-level truth: its slope is scored by goal_recovery
+  if (!is.null(truth) && length(intersect(p$numeric, p$vars)) && !is.null(summary$goal_recovery)) truth <- NULL
   if (!is.null(truth)) {
     rec <- .ba_outcome_recovery(res, truth, frame, p, alpha, type)
     if (!is.null(rec)) {
