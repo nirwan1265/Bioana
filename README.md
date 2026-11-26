@@ -20,6 +20,14 @@ question --Biodes--> design folder --Simitall or the lab--> data + data_manifest
 Bioana never reads the question: Biodes already turned it into a spec. It
 never simulates: it treats simulated and measured data the same way.
 
+## Showcase
+
+[`examples/showcase/`](examples/showcase): three questions followed from Biodes (design) through Simitall
+(simulated data and truth) to Bioana (analysis scored against the truth): a sorghum GWAS (6 of 10 QTNs, no false
+positives), an RNA-seq genotype x drought interaction (DESeq2 vs edgeR against 500 planted genes), and seed
+priming with a delayed effect and seed rot (piecewise hazard ratios 0.63 and 0.67 against 0.6). Same folder names
+in all three repositories.
+
 ## Install
 
 ```r

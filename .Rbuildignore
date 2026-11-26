@@ -5,3 +5,4 @@
 ^docs$
 ^install_bioana\.R$
 ^requirements\.txt$
+^examples$

@@ -1,0 +1,6 @@
+term	contrast	statistic_name	statistic	df1	df2	p	estimate	ci_low	ci_high	effect_name	effect	n
+treatment	germination	Gray's test chi-squared (germination)	12.013672076982	3		0.0073364721870095						480
+treatment	seed rot before germination	Gray's test chi-squared (seed rot before germination)	2.97213572675535	3		0.395941281167498						480
+treatment	genotype_2 / not primed	subdistribution hazard ratio (Fine-Gray, germination)	-0.623406854625795			0.53	0.904755131593089	0.660490516477032	1.23935443087091	subdistribution hazard ratio	0.904755131593089	480
+treatment	genotype_1 / primed	subdistribution hazard ratio (Fine-Gray, germination)	-0.717891092947541			0.47	0.897898271201434	0.669158982055047	1.20482774205697	subdistribution hazard ratio	0.897898271201434	480
+treatment	genotype_2 / primed	subdistribution hazard ratio (Fine-Gray, germination)	-3.13440810797384			0.0017	0.563722993640981	0.393917872785225	0.806725552493057	subdistribution hazard ratio	0.563722993640981	480

@@ -1,0 +1,29 @@
+{
+  "rnaseq": {
+    "goal": "interaction",
+    "bioana_goal": "interaction",
+    "status": "planted",
+    "model_terms": [
+      "treatment:treatment2"
+    ],
+    "tested_terms": [
+      "treatment:treatment2"
+    ],
+    "terms_match": true,
+    "test": "wald",
+    "scored": true,
+    "n_goal_features": 500,
+    "n_tested": 500,
+    "found": 215,
+    "tpr": 0.43,
+    "n_called": 273,
+    "called_outside_goal": 58,
+    "called_other_planted": 7,
+    "called_not_planted": 51,
+    "called_hidden_factor": 0,
+    "false_call_rate": 0.186813,
+    "effect_scale": "log2 difference of differences, last levels vs references",
+    "estimate_cor": 0.926643,
+    "sign_agreement": 0.982
+  }
+}

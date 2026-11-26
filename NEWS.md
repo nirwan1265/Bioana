@@ -1,3 +1,20 @@
+# bioana 0.14.0
+
+- `examples/showcase/` (01_gwas_sorghum, 02_rnaseq_drought, 03_germination_survival, same names as Biodes and
+  Simitall): `make_showcase.R` analyses Simitall's showcase folders with the default engines and keeps the main
+  tables, the report and the truth scoring; READMEs give question, model, headline and recovery.
+- Survival with competing events: the cause-specific analysis (KM net of the competing risk, log-rank family,
+  Cox, RMST) is now the primary block, with the competing-risks block (CIF, Gray, Fine-Gray) next to it. Before,
+  competing events replaced the KM / log-rank analysis.
+- Delayed / early effects on several factors: joint weighted log-rank over the groups plus one per factor
+  stratified on the others; piecewise Cox with a before / after HR per factor (robust SEs by the unit), each
+  against Simitall's `hazard_ratios`. The averaged Cox HR now comes from coxme fits too. Fixed: `cluster()`
+  written as `survival::cluster()` was fitted as a factor.
+- Weighted log-rank takes strata (U and V summed; = survdiff with strata).
+- Per-group survival truth (Simitall `outcome_model.groups`): median of the event alone, event-free survival and
+  RMST (to the truth's horizon), cumulative incidence at the landmark days (`survival_group_recovery.tsv`).
+  Showcase 03: 24 of 24 measures in their CI.
+
 # bioana 0.13.6
 
 - Simitall e923876 `adjustment_effects`: each adjustment factor's level coefficient scored against its planted

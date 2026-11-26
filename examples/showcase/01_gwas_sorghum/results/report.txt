@@ -1,0 +1,8 @@
+[1] "GWAS for trait: mean"
+[1] "Variance components estimated. Testing markers."
+bioana: design 'alpha' (y ~ treatment + rep + (1 | rep:block))
+  [outcome] [lmerTest 3.1.3] continuous outcome, lmerMod ; truth: 298/299 coefficients in their CI
+      goal: the study's goals (association) do not apply to this data set in Bioana yet; tested treatment_effect
+      test not run: random terms other than one subject or block (rep:block): see the mixed model's ANOVA table
+  [genetics] [rrBLUP 4.6.3] 300 lines x 1905 markers tested, 6 significant; truth: 6/10 QTN found (FDR 0), sign 1, line means r 0.858
+  secondary engines not run (outcome -> glmmtmb): bioana_analyze(dir, secondary = TRUE)

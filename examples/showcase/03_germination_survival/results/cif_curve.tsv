@@ -1,0 +1,165 @@
+group	cause	time	cif	var
+genotype_1 / not primed	germination	0	0	0
+genotype_1 / not primed	germination	2	0	0
+genotype_1 / not primed	germination	2	0.0666666666666667	0.000522875816993464
+genotype_1 / not primed	germination	4	0.0666666666666667	0.000522875816993464
+genotype_1 / not primed	germination	4	0.141666666666667	0.00102086494213021
+genotype_1 / not primed	germination	6	0.141666666666667	0.00102086494213021
+genotype_1 / not primed	germination	6	0.233333333333333	0.00149759546349812
+genotype_1 / not primed	germination	8	0.233333333333333	0.00149759546349812
+genotype_1 / not primed	germination	8	0.325	0.00182447591065805
+genotype_1 / not primed	germination	10	0.325	0.00182447591065805
+genotype_1 / not primed	germination	10	0.391666666666667	0.00197139460697099
+genotype_1 / not primed	germination	12	0.391666666666667	0.00197139460697099
+genotype_1 / not primed	germination	12	0.45	0.0020425858955316
+genotype_1 / not primed	germination	14	0.45	0.0020425858955316
+genotype_1 / not primed	germination	14	0.516666666666667	0.00204691985169103
+genotype_1 / not primed	germination	16	0.516666666666667	0.00204691985169103
+genotype_1 / not primed	germination	16	0.55	0.00201818423616149
+genotype_1 / not primed	germination	18	0.55	0.00201818423616149
+genotype_1 / not primed	germination	18	0.616666666666667	0.00191367248748099
+genotype_1 / not primed	germination	20	0.616666666666667	0.00191367248748099
+genotype_1 / not primed	germination	20	0.625	0.00189391957509433
+genotype_1 / not primed	germination	20	0.625	0.00189391957509433
+genotype_2 / not primed	germination	0	0	0
+genotype_2 / not primed	germination	2	0	0
+genotype_2 / not primed	germination	2	0.075	0.000582983193277311
+genotype_2 / not primed	germination	4	0.075	0.000582983193277311
+genotype_2 / not primed	germination	4	0.175	0.00121082103661818
+genotype_2 / not primed	germination	6	0.175	0.00121082103661818
+genotype_2 / not primed	germination	6	0.3	0.00175513251983836
+genotype_2 / not primed	germination	8	0.3	0.00175513251983836
+genotype_2 / not primed	germination	8	0.35	0.00189274255350166
+genotype_2 / not primed	germination	10	0.35	0.00189274255350166
+genotype_2 / not primed	germination	10	0.408333333333333	0.00199882942163723
+genotype_2 / not primed	germination	12	0.408333333333333	0.00199882942163723
+genotype_2 / not primed	germination	12	0.45	0.00204108588701223
+genotype_2 / not primed	germination	14	0.45	0.00204108588701223
+genotype_2 / not primed	germination	14	0.483333333333333	0.00205480856752841
+genotype_2 / not primed	germination	16	0.483333333333333	0.00205480856752841
+genotype_2 / not primed	germination	16	0.533333333333333	0.0020383674012707
+genotype_2 / not primed	germination	18	0.533333333333333	0.0020383674012707
+genotype_2 / not primed	germination	18	0.55	0.00201923621089342
+genotype_2 / not primed	germination	20	0.55	0.00201923621089342
+genotype_2 / not primed	germination	20	0.558333333333333	0.00200744600685396
+genotype_2 / not primed	germination	20	0.558333333333333	0.00200744600685396
+genotype_1 / primed	germination	0	0	0
+genotype_1 / primed	germination	2	0	0
+genotype_1 / primed	germination	2	0.0333333333333333	0.00027077497665733
+genotype_1 / primed	germination	4	0.0333333333333333	0.00027077497665733
+genotype_1 / primed	germination	4	0.125	0.000918968420563375
+genotype_1 / primed	germination	6	0.125	0.000918968420563375
+genotype_1 / primed	germination	6	0.216666666666667	0.00142661020264975
+genotype_1 / primed	germination	8	0.216666666666667	0.00142661020264975
+genotype_1 / primed	germination	8	0.283333333333333	0.00170056389240565
+genotype_1 / primed	germination	10	0.283333333333333	0.00170056389240565
+genotype_1 / primed	germination	10	0.341666666666667	0.00187956658533115
+genotype_1 / primed	germination	12	0.341666666666667	0.00187956658533115
+genotype_1 / primed	germination	12	0.391666666666667	0.00198501283877637
+genotype_1 / primed	germination	14	0.391666666666667	0.00198501283877637
+genotype_1 / primed	germination	14	0.433333333333333	0.00203868480249648
+genotype_1 / primed	germination	16	0.433333333333333	0.00203868480249648
+genotype_1 / primed	germination	16	0.525	0.00205292096722963
+genotype_1 / primed	germination	18	0.525	0.00205292096722963
+genotype_1 / primed	germination	18	0.55	0.00203078477035169
+genotype_1 / primed	germination	20	0.55	0.00203078477035169
+genotype_1 / primed	germination	20	0.591666666666667	0.00197479880157359
+genotype_1 / primed	germination	20	0.591666666666667	0.00197479880157359
+genotype_2 / primed	germination	0	0	0
+genotype_2 / primed	germination	2	0	0
+genotype_2 / primed	germination	2	0.0416666666666667	0.000335550887021475
+genotype_2 / primed	germination	4	0.0416666666666667	0.000335550887021475
+genotype_2 / primed	germination	4	0.15	0.00107011567446718
+genotype_2 / primed	germination	6	0.15	0.00107011567446718
+genotype_2 / primed	germination	6	0.241666666666667	0.00153395359471023
+genotype_2 / primed	germination	8	0.241666666666667	0.00153395359471023
+genotype_2 / primed	germination	8	0.258333333333333	0.00160118028156985
+genotype_2 / primed	germination	10	0.258333333333333	0.00160118028156985
+genotype_2 / primed	germination	10	0.291666666666667	0.00172189855995553
+genotype_2 / primed	germination	12	0.291666666666667	0.00172189855995553
+genotype_2 / primed	germination	12	0.308333333333333	0.0017752245369029
+genotype_2 / primed	germination	14	0.308333333333333	0.0017752245369029
+genotype_2 / primed	germination	14	0.35	0.00188811907922113
+genotype_2 / primed	germination	16	0.35	0.00188811907922113
+genotype_2 / primed	germination	16	0.358333333333333	0.00190743587367179
+genotype_2 / primed	germination	18	0.358333333333333	0.00190743587367179
+genotype_2 / primed	germination	18	0.391666666666667	0.00197331278238738
+genotype_2 / primed	germination	20	0.391666666666667	0.00197331278238738
+genotype_1 / not primed	seed rot before germination	0	0	0
+genotype_1 / not primed	seed rot before germination	2	0	0
+genotype_1 / not primed	seed rot before germination	2	0.0166666666666667	0.000137721755368814
+genotype_1 / not primed	seed rot before germination	4	0.0166666666666667	0.000137721755368814
+genotype_1 / not primed	seed rot before germination	4	0.05	0.000398711662995625
+genotype_1 / not primed	seed rot before germination	6	0.05	0.000398711662995625
+genotype_1 / not primed	seed rot before germination	6	0.1	0.000753069637751377
+genotype_1 / not primed	seed rot before germination	8	0.1	0.000753069637751377
+genotype_1 / not primed	seed rot before germination	8	0.125	0.000911631496973435
+genotype_1 / not primed	seed rot before germination	12	0.125	0.000911631496973435
+genotype_1 / not primed	seed rot before germination	12	0.166666666666667	0.00115077705022214
+genotype_1 / not primed	seed rot before germination	14	0.166666666666667	0.00115077705022214
+genotype_1 / not primed	seed rot before germination	14	0.191666666666667	0.00127659184506851
+genotype_1 / not primed	seed rot before germination	16	0.191666666666667	0.00127659184506851
+genotype_1 / not primed	seed rot before germination	16	0.2	0.00131486140710577
+genotype_1 / not primed	seed rot before germination	18	0.2	0.00131486140710577
+genotype_1 / not primed	seed rot before germination	18	0.216666666666667	0.00138817173389769
+genotype_1 / not primed	seed rot before germination	20	0.216666666666667	0.00138817173389769
+genotype_2 / not primed	seed rot before germination	0	0	0
+genotype_2 / not primed	seed rot before germination	2	0	0
+genotype_2 / not primed	seed rot before germination	2	0.025	0.000204831932773109
+genotype_2 / not primed	seed rot before germination	4	0.025	0.000204831932773109
+genotype_2 / not primed	seed rot before germination	4	0.05	0.000398499515330535
+genotype_2 / not primed	seed rot before germination	6	0.05	0.000398499515330535
+genotype_2 / not primed	seed rot before germination	6	0.0916666666666667	0.000696143379252977
+genotype_2 / not primed	seed rot before germination	8	0.0916666666666667	0.000696143379252977
+genotype_2 / not primed	seed rot before germination	8	0.125	0.000908407657625462
+genotype_2 / not primed	seed rot before germination	10	0.125	0.000908407657625462
+genotype_2 / not primed	seed rot before germination	10	0.133333333333333	0.000958109468887661
+genotype_2 / not primed	seed rot before germination	12	0.133333333333333	0.000958109468887661
+genotype_2 / not primed	seed rot before germination	12	0.141666666666667	0.00100659500180355
+genotype_2 / not primed	seed rot before germination	14	0.141666666666667	0.00100659500180355
+genotype_2 / not primed	seed rot before germination	14	0.175	0.00118921415337422
+genotype_2 / not primed	seed rot before germination	16	0.175	0.00118921415337422
+genotype_2 / not primed	seed rot before germination	16	0.216666666666667	0.0013892583223831
+genotype_2 / not primed	seed rot before germination	18	0.216666666666667	0.0013892583223831
+genotype_2 / not primed	seed rot before germination	18	0.25	0.00152064273196782
+genotype_2 / not primed	seed rot before germination	20	0.25	0.00152064273196782
+genotype_2 / not primed	seed rot before germination	20	0.266666666666667	0.00157937997406497
+genotype_2 / not primed	seed rot before germination	20	0.266666666666667	0.00157937997406497
+genotype_1 / primed	seed rot before germination	0	0	0
+genotype_1 / primed	seed rot before germination	2	0	0
+genotype_1 / primed	seed rot before germination	2	0.00833333333333333	6.94444444444444e-05
+genotype_1 / primed	seed rot before germination	6	0.00833333333333333	6.94444444444444e-05
+genotype_1 / primed	seed rot before germination	6	0.0583333333333333	0.000461883814896179
+genotype_1 / primed	seed rot before germination	8	0.0583333333333333	0.000461883814896179
+genotype_1 / primed	seed rot before germination	8	0.0666666666666667	0.000522322494122652
+genotype_1 / primed	seed rot before germination	10	0.0666666666666667	0.000522322494122652
+genotype_1 / primed	seed rot before germination	10	0.1	0.000752330084570284
+genotype_1 / primed	seed rot before germination	12	0.1	0.000752330084570284
+genotype_1 / primed	seed rot before germination	12	0.133333333333333	0.000961734308101539
+genotype_1 / primed	seed rot before germination	14	0.133333333333333	0.000961734308101539
+genotype_1 / primed	seed rot before germination	14	0.166666666666667	0.00115049658367583
+genotype_1 / primed	seed rot before germination	16	0.166666666666667	0.00115049658367583
+genotype_1 / primed	seed rot before germination	16	0.183333333333333	0.00123673217903967
+genotype_1 / primed	seed rot before germination	20	0.183333333333333	0.00123673217903967
+genotype_1 / primed	seed rot before germination	20	0.191666666666667	0.00127718059812592
+genotype_1 / primed	seed rot before germination	20	0.191666666666667	0.00127718059812592
+genotype_2 / primed	seed rot before germination	0	0	0
+genotype_2 / primed	seed rot before germination	2	0	0
+genotype_2 / primed	seed rot before germination	2	0.025	0.000204831932773109
+genotype_2 / primed	seed rot before germination	4	0.025	0.000204831932773109
+genotype_2 / primed	seed rot before germination	4	0.05	0.000398826083984913
+genotype_2 / primed	seed rot before germination	6	0.05	0.000398826083984913
+genotype_2 / primed	seed rot before germination	6	0.1	0.000753090261296299
+genotype_2 / primed	seed rot before germination	8	0.1	0.000753090261296299
+genotype_2 / primed	seed rot before germination	8	0.116666666666667	0.000859854332126243
+genotype_2 / primed	seed rot before germination	10	0.116666666666667	0.000859854332126243
+genotype_2 / primed	seed rot before germination	10	0.133333333333333	0.000962007977294422
+genotype_2 / primed	seed rot before germination	12	0.133333333333333	0.000962007977294422
+genotype_2 / primed	seed rot before germination	12	0.166666666666667	0.00115226457276555
+genotype_2 / primed	seed rot before germination	16	0.166666666666667	0.00115226457276555
+genotype_2 / primed	seed rot before germination	16	0.191666666666667	0.001282969000189
+genotype_2 / primed	seed rot before germination	18	0.191666666666667	0.001282969000189
+genotype_2 / primed	seed rot before germination	18	0.241666666666667	0.00151382675674237
+genotype_2 / primed	seed rot before germination	20	0.241666666666667	0.00151382675674237
+genotype_2 / primed	seed rot before germination	20	0.275	0.00164121546247919
+genotype_2 / primed	seed rot before germination	20	0.275	0.00164121546247919

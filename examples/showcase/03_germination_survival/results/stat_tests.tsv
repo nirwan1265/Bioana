@@ -1,0 +1,8 @@
+term	contrast	statistic_name	statistic	df1	df2	p	estimate	ci_low	ci_high	effect_name	effect	n
+treatment		log-rank chi-squared	13.8157261630888	3		0.00316701965554375						480
+treatment		robust score chi-squared (Lin-Wei, clustered by unit)	8.03583828914865	3		0.0452768138556474						480
+treatment		stratified log-rank chi-squared (strata: block)	12.4982817954372	3		0.00585734286503806						480
+treatment		weighted log-rank chi-squared (fh_0_1, prespecified)	23.2402400783395	3		3.59843803393699e-05						480
+treatmentgenotype_2	treatmentgenotype_2	hazard ratio (Cox, Wald z)	-0.488712277827094			0.62504541019622	0.909479563997279	0.621632125847764	1.33061507431044	hazard ratio	0.909479563997279	480
+treatment2primed	treatment2primed	hazard ratio (Cox, Wald z)	-0.972110795761806			0.330995431938057	0.829812462267119	0.569675860939298	1.20873775728965	hazard ratio	0.829812462267119	480
+treatmentgenotype_2:treatment2primed	treatmentgenotype_2:treatment2primed	hazard ratio (Cox, Wald z)	-1.2915636337826			0.196508304815199	0.690010587652975	0.392931951264238	1.2116973678046	hazard ratio	0.690010587652975	480

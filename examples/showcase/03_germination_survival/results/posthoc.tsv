@@ -1,0 +1,7 @@
+family	by	contrast	estimate	se	df	statistic	p	p_adj	adjust
+log-rank		genotype_2 / not primed - genotype_1 / not primed			1		0.524196691212439	1	holm
+log-rank		genotype_1 / primed - genotype_1 / not primed			1		0.212912358571511	0.638737075714533	holm
+log-rank		genotype_2 / primed - genotype_1 / not primed			1		0.000464611688870987	0.00278767013322592	holm
+log-rank		genotype_1 / primed - genotype_2 / not primed			1		0.637431870118127	1	holm
+log-rank		genotype_2 / primed - genotype_2 / not primed			1		0.00722814965967452	0.0361407482983726	holm
+log-rank		genotype_2 / primed - genotype_1 / primed			1		0.011855668473161	0.0474226738926439	holm

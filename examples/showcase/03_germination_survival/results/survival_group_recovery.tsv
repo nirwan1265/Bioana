@@ -1,0 +1,25 @@
+group	measure	true	estimate	ci_low	ci_high	covered
+genotype_1:not primed	median (event alone)	11.9822	14	10	16	TRUE
+genotype_1:not primed	event-free survival at  7	0.6575	0.666666666666667	0.574680097104295	0.743203310599339	TRUE
+genotype_1:not primed	event-free survival at 14	0.3055	0.291666666666667	0.213303698423815	0.374330887234178	TRUE
+genotype_1:not primed	event-free RMST to 21	10.6283	11.1916666666667	10.070907344731	12.3124259886024	TRUE
+genotype_1:not primed	cumulative incidence at  7	0.2531	0.233333333333333	0.157485121073015	0.309181545593652	TRUE
+genotype_1:not primed	cumulative incidence at 14	0.5132	0.516666666666667	0.427992215331841	0.605341118001492	TRUE
+genotype_1:primed	median (event alone)	15.213	16	12	18	TRUE
+genotype_1:primed	event-free survival at  7	0.6748	0.725	0.635711366345746	0.795896532040193	TRUE
+genotype_1:primed	event-free survival at 14	0.3932	0.4	0.312283530064138	0.486074695323306	TRUE
+genotype_1:primed	event-free RMST to 21	11.6827	12.6	11.4680842682024	13.7319157317976	TRUE
+genotype_1:primed	cumulative incidence at  7	0.2356	0.216666666666667	0.142637859120813	0.290695474212521	TRUE
+genotype_1:primed	cumulative incidence at 14	0.4128	0.433333333333333	0.344837436721314	0.521829229945352	TRUE
+genotype_2:not primed	median (event alone)	15.213	14	10	16	TRUE
+genotype_2:not primed	event-free survival at  7	0.6748	0.608333333333333	0.515056394241617	0.689118466159866	TRUE
+genotype_2:not primed	event-free survival at 14	0.3932	0.341666666666667	0.25837472541658	0.426480871854039	TRUE
+genotype_2:not primed	event-free RMST to 21	11.6827	11.1083333333333	9.91998964470765	12.296677021959	TRUE
+genotype_2:not primed	cumulative incidence at  7	0.2356	0.3	0.217888677395744	0.382111322604256	TRUE
+genotype_2:not primed	cumulative incidence at 14	0.4128	0.483333333333333	0.394488173101783	0.572178493564884	TRUE
+genotype_2:primed	median (event alone)	19.9484		18		TRUE
+genotype_2:primed	event-free survival at  7	0.6853	0.658333333333333	0.566080067707655	0.735557998818378	TRUE
+genotype_2:primed	event-free survival at 14	0.4575	0.483333333333333	0.391528114116854	0.569087647483583	TRUE
+genotype_2:primed	event-free RMST to 21	12.4859	13.1666666666667	11.870203755755	14.4631295775783	TRUE
+genotype_2:primed	cumulative incidence at  7	0.2249	0.241666666666667	0.164903266748899	0.318430066584434	TRUE
+genotype_2:primed	cumulative incidence at 14	0.3399	0.35	0.264834680230772	0.435165319769228	TRUE

@@ -74,8 +74,13 @@ test_that("colon: pairwise log-rank (BH) = survminer::pairwise_survdiff and the 
 test_that("mgus2 competing risks: Gray's test and Fine-Gray = cmprsk; Fine-Gray ~ survival::finegray; CIF 10% vs 1 - KM 21% at 20 years", {
   skip_if_not_installed("cmprsk")
   d <- bioana_example("mgus2"); utils::capture.output(r <- bioana_analyze(d, secondary = FALSE))
-  a <- r$summary$analyses$outcome; st <- a$stat_test
+  a <- r$summary$analyses$outcome; s0 <- a$stat_test
+  # primary: cause-specific KM / log-rank (progression; death censored); the competing-risks block next to it
+  expect_equal(s0$test, "survival"); expect_match(s0$note, "competing events censored")
+  st <- s0$also[[1]]
   expect_equal(st$test, "competing_risks"); expect_match(paste(a$warnings, collapse = " "), "cause-specific")
+  m0 <- utils::read.delim(file.path(d, "sample_metadata_template.tsv")); m0$sex <- factor(m0$sex, c("female", "male"))
+  expect_equal(trow(s0, "^log-rank")[[1]]$statistic, survival::survdiff(survival::Surv(time, event == 1) ~ sex, data = m0)$chisq)
   m <- utils::read.delim(file.path(d, "sample_metadata_template.tsv")); m$sex <- factor(m$sex, c("female", "male"))
   ci <- cmprsk::cuminc(m$time, m$event, m$sex, cencode = 0)
   expect_equal(trow(st, "Gray.*progression")[[1]]$p, unname(ci$Tests["1", "pv"]))
@@ -323,4 +328,45 @@ test_that("weighted log-rank in base R (no survMisc): fh_p_0 = survdiff(rho = p)
   expect_equal(bioana:::.ba_weighted_logrank(d3, "fh_0_1")$chisq, l$chiSq[grep("^FH_p=0_q=1$", l$W)], tolerance = 1e-8)
   key <- c(gehan = "n", tarone_ware = "sqrtN")
   for (w in names(key)) expect_equal(bioana:::.ba_weighted_logrank(d3, w)$chisq, l$chiSq[match(key[[w]], l$W)], tolerance = 1e-8)
+})
+
+test_that("delayed effect on two factors: joint and per-factor weighted log-rank, piecewise HR per factor (robust by cell), per-group truth (event-free and net)", {
+  set.seed(31); n <- 400; t0 <- 6
+  m <- data.frame(unit = sprintf("S%03d", 1:n), sample_id = sprintf("S%03d", 1:n), line = rep(c("L1", "L2"), each = n / 2), priming = rep(c("no", "yes"), n / 2), stringsAsFactors = FALSE)
+  hz <- 0.08 * ifelse(m$line == "L2", 0.6, 1) * ifelse(m$priming == "yes", 0.6, 1) / 0.08   # multiplier after t0
+  e <- -log(stats::runif(n)); t <- ifelse(e <= 0.08 * t0, e / 0.08, t0 + (e - 0.08 * t0) / (0.08 * hz))
+  rot <- stats::rexp(n, 0.02); tt <- pmin(t, rot, 21)
+  m$time <- round(tt, 2); m$event <- ifelse(tt == t, 1L, ifelse(tt == rot, 2L, 0L))
+  spec <- list(handoff_version = "0.6.8", origin = "planned", organism = "test", system = "lab",
+               factors = list(list(name = "line", n_levels = 2L, levels = list("L1", "L2")), list(name = "priming", n_levels = 2L, levels = list("no", "yes"))),
+               design = list(chosen = "factorial_crd"), primary_outcome = list(name = "days", type = "survival", event_column = "event", event_codes = list(`0` = "censored", `1` = "germination", `2` = "rot")),
+               analysis = list(model = "y ~ treatment + treatment2", terms = list(treatment = "line", treatment2 = "priming", layout_columns = list("line", "priming")),
+                               goals = list("survival"), goal_terms = list(survival = list("treatment", "treatment2")), survival = list(logrank_weight = "fh_0_1")))
+  d <- file.path(tempfile("d2_"), "design"); dir.create(d, recursive = TRUE)
+  jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
+  utils::write.csv(m[c("unit", "line", "priming")], file.path(d, "field_layout.csv"), row.names = FALSE)
+  utils::write.table(m, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  grp <- list(`L1:no` = list(median = 9, survival_at = list(`7` = 0.5), rmst = 10, cif_event_at = list(`7` = 0.4)))
+  jsonlite::write_json(list(outcome_model = list(family = "delayed_effect", proportional_hazards = FALSE, change_time = t0, rmst_tau = 21, groups = grp),
+                            goal_truth = list(goal = "survival", model_terms = list("treatment", "treatment2"), status = "planted", true_effect = 0.6, proportional_hazards = FALSE,
+                                              hazard_ratios = list(treatment = list(L1 = 1, L2 = 0.6), treatment2 = list(no = 1, yes = 0.6)))),
+                       file.path(d, "sim_truth.json"), auto_unbox = TRUE, digits = NA)
+  bioana_write_manifest(d, list(id = "outcome", data_type = "outcome", files = list(table = "sample_metadata_template.tsv"), column = "time", event_column = "event",
+                                truth = list(kind = "outcome", file = "sim_truth.json", goal = list(goal = "survival", field = "goal_truth", terms = list("treatment", "treatment2"), test = "wald"))))
+  utils::capture.output(r <- bioana_analyze(d, secondary = FALSE)); a <- r$summary$analyses$outcome; gr <- a$goal_recovery
+  expect_equal(a$stat_test$test, "survival"); expect_equal(a$stat_test$also[[1]]$test, "competing_risks")
+  w <- transform(m, y_ = time, event_ = as.integer(event == 1), treatment = factor(line), treatment2 = factor(priming))
+  expect_equal(gr$p, bioana:::.ba_weighted_logrank(transform(w, grp_ = interaction(treatment, treatment2, sep = " / ")), "fh_0_1")$p)
+  expect_equal(gr$weighted_logrank_by_factor[[1]]$p, bioana:::.ba_weighted_logrank(transform(w, grp_ = treatment), "fh_0_1", strata = "treatment2")$p)
+  sp <- survival::survSplit(Surv(y_, event_) ~ treatment + treatment2, data = w[c("y_", "event_", "treatment", "treatment2")], cut = t0, episode = "ph", start = "t1")
+  sp$la <- (sp$treatment == "L2") * (sp$ph == 2); sp$lb <- (sp$treatment == "L2") * (sp$ph == 1); sp$pa <- (sp$treatment2 == "yes") * (sp$ph == 2); sp$pb <- (sp$treatment2 == "yes") * (sp$ph == 1)
+  pc <- survival::coxph(survival::Surv(t1, y_, event_) ~ lb + la + pb + pa, data = sp)
+  pt <- do.call(rbind, lapply(gr$piecewise$terms, as.data.frame))
+  expect_equal(pt$estimate, unname(exp(stats::coef(pc)[c("la", "pa")])), tolerance = 1e-8)
+  sg <- utils::read.delim(list.files(d, "survival_group_recovery.tsv", recursive = TRUE, full.names = TRUE))
+  g1 <- w[w$line == "L1" & w$priming == "no", ]
+  ka <- survival::survfit(survival::Surv(time, event > 0) ~ 1, data = g1); km <- survival::survfit(survival::Surv(time, event == 1) ~ 1, data = g1)
+  expect_equal(sg$estimate[sg$measure == "event-free survival at 7"], summary(ka, times = 7)$surv)
+  expect_equal(sg$estimate[sg$measure == "median (event alone)"], unname(summary(km)$table["median"]))
+  expect_equal(sg$estimate[sg$measure == "event-free RMST to 21"], unname(summary(ka, rmean = 21)$table["rmean"]))
 })

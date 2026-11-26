@@ -1,0 +1,22 @@
+bioana: design 'factorial' (y ~ treatment * treatment2 + (1 | block))
+  [outcome] [coxme 2.2.22] {goal survival, Wald} survival outcome, coxme (Cox proportional hazards); truth: sign 1, detected 0
+      Kaplan-Meier [survival 3.5.8] median: genotype_1 / not primed 14 [10, 16] (75/120 events); genotype_2 / not primed 14 [10, 18] (67/120 events); genotype_1 / primed 16 [14, 18] (71/120 events); genotype_2 / primed NA [18, NA] (47/120 events)
+      log-rank chi-squared(3) = 13.8, p = 0.00317
+      robust score chi-squared (Lin-Wei, clustered by unit)(3) = 8.04, p = 0.0453
+      stratified log-rank chi-squared (strata: block)(3) = 12.5, p = 0.00586
+      weighted log-rank chi-squared (fh_0_1, prespecified)(3) = 23.2, p = 3.6e-05
+      Cox HR treatmentgenotype_2 0.909 [0.622, 1.33], p = 0.625
+      Cox HR treatment2primed 0.83 [0.57, 1.21], p = 0.331
+      Cox HR treatmentgenotype_2:treatment2primed 0.69 [0.393, 1.21], p = 0.197
+      Cox: mixed (coxme), random SD block 0.111, unit_id_ 0.236; PH check (cox.zph, fixed part) global p = 0.00199
+      pairwise log-rank (holm): 6 comparisons, 3 with adjusted p < 0.05
+      checks: competing events censored here (cause-specific: Kaplan-Meier is survival net of the competing risk); cumulative incidence in the competing-risks block; median not reached in genotype_2 / primed: report a landmark survival or the RMST; 480 subsamples in 48 units: the robust score test is primary; the plain log-rank, KM and RMST intervals treat subsamples as independent; proportional hazards rejected on the fixed part (cox.zph global p = 0.00199)
+      competing risks [cmprsk 2.2.11], event of interest germination, competing: seed rot before germination
+      Gray's test chi-squared (germination)(3) = 12, p = 0.00734
+      Gray's test chi-squared (seed rot before germination)(3) = 2.97, p = 0.396
+      subdistribution hazard ratio (Fine-Gray, germination): genotype_2 / not primed 0.905 [0.66, 1.24], p = 0.53
+      subdistribution hazard ratio (Fine-Gray, germination): genotype_1 / primed 0.898 [0.669, 1.2], p = 0.47
+      subdistribution hazard ratio (Fine-Gray, germination): genotype_2 / primed 0.564 [0.394, 0.807], p = 0.0017
+      cumulative incidence vs 1 - KM: genotype_1 / not primed at 7 0.233 vs 0.240; genotype_1 / not primed at 14 0.517 vs 0.582; genotype_2 / not primed at 7 0.300 vs 0.310; genotype_2 / not primed at 14 0.483 vs 0.530; genotype_1 / primed at 7 0.217 vs 0.218; genotype_1 / primed at 14 0.433 vs 0.463; genotype_2 / primed at 7 0.242 vs 0.250; genotype_2 / primed at 14 0.350 vs 0.381; all at 7 0.248 vs 0.254; all at 14 0.446 vs 0.489
+      checks: 1 - Kaplan-Meier overstates the risk of germination (all at 14: 0.489 vs CIF 0.446)
+      goal truth (survival, terms treatment, treatment2): detected (p = 3.6e-05), estimate 0.63 vs true 0.6, in CI; piecewise HR after t = 5.99: treatment 0.63 [0.454, 0.873] vs 0.6, treatment2 0.667 [0.488, 0.911] vs 0.6; weighted log-rank per factor: treatment p = 0.000218, treatment2 p = 0.015; per group 24/24 measures in CI; hazards not proportional (delayed_effect): one Cox HR (treatment 0.909, treatment2 0.830) averages the phases

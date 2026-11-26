@@ -1,0 +1,170 @@
+{
+  "bioana_version": "0.14.0",
+  "design": "factorial",
+  "model": "y ~ treatment * treatment2 + block",
+  "handoff_version": "0.6.8",
+  "manifest": "simitall 0.1.0",
+  "alpha": 0.05,
+  "analyses": {
+    "rnaseq": {
+      "method": "DESeq2 negative-binomial GLM, Wald test",
+      "design": "~1 + treatment + treatment2 + block + treatment:treatment2",
+      "n_features_tested": 5000,
+      "n_samples": 16,
+      "contrasts": "treatmentdrought:treatment2mutant",
+      "significant": {
+        "treatmentdrought:treatment2mutant": 273
+      },
+      "engine": {
+        "engine": "deseq2",
+        "package": "DESeq2",
+        "version": "1.42.0",
+        "language": "R",
+        "call": "DESeq2::DESeq(DESeqDataSetFromMatrix(counts, colData, design = ~1), full = model.matrix(~1 + treatment + treatment2 + block + treatment:treatment2)); DESeq2::results(dds, name = <coefficient>, alpha = 0.05)",
+        "formula": "y ~ treatment * treatment2 + block",
+        "model": "negative-binomial GLM; median-of-ratios size factors; gene-wise dispersions shrunk to a fitted trend",
+        "input": "raw integer counts, 5000 features x 16 units",
+        "assumptions": "raw integer counts, one library per experimental unit; NB mean-variance; fixed effects",
+        "test_statistic": "Wald z per coefficient",
+        "multiple_testing": "Benjamini-Hochberg with independent filtering on mean count (DESeq2 results() default)",
+        "estimate_scale": "log2 fold change",
+        "random_terms": "none: fixed terms only",
+        "design_fit": "full",
+        "design_fit_note": null,
+        "experimental_unit": "plant",
+        "n_units": 16,
+        "fallback_used": false,
+        "not_used": {
+          "bioana_native": "Bioana's own code: off unless allow_fallback = TRUE"
+        },
+        "reference": "Love, Huber & Anders 2014, Genome Biology 15:550; vignette 'Analyzing RNA-seq data with DESeq2'",
+        "tutorial": "docs/engines/deseq2.md"
+      },
+      "diagnostics": {
+        "checks": [
+          {
+            "check": "estimability",
+            "status": "ok",
+            "detail": "7 fixed coefficients, all estimable"
+          },
+          {
+            "check": "residual_df",
+            "status": "ok",
+            "detail": "9 residual degrees of freedom"
+          },
+          {
+            "check": "replication",
+            "status": "ok",
+            "detail": "treatment: 8 to 8 units per level"
+          },
+          {
+            "check": "replication",
+            "status": "ok",
+            "detail": "treatment2: 8 to 8 units per level"
+          }
+        ],
+        "n_check_warnings": 0,
+        "fit_warnings": [],
+        "engine": {
+          "non_converged": 0
+        }
+      },
+      "goal": {
+        "id": "interaction",
+        "source": "study_spec",
+        "assumed_by_biodes": false,
+        "assumed_why": null,
+        "test": "wald",
+        "effect": {
+          "scale": "log2",
+          "definition": "difference of differences on goal_effect.scale",
+          "scale_used": "log2 fold change"
+        },
+        "scale_note": null,
+        "predictor": null,
+        "coefficients": [
+          "treatmentdrought:treatment2mutant"
+        ],
+        "dropped_terms": null,
+        "tested_terms": [
+          "treatment:treatment2"
+        ],
+        "within": null,
+        "label": null,
+        "note": null,
+        "unknown_to_biodes_registry": null
+      },
+      "secondary_engine": "edger",
+      "data_type": "feature_counts",
+      "assay": "rnaseq",
+      "scale": "log2 fold change",
+      "goal_recovery": {
+        "goal": "interaction",
+        "bioana_goal": "interaction",
+        "status": "planted",
+        "model_terms": [
+          "treatment:treatment2"
+        ],
+        "tested_terms": [
+          "treatment:treatment2"
+        ],
+        "terms_match": true,
+        "test": "wald",
+        "scored": true,
+        "n_goal_features": 500,
+        "n_tested": 500,
+        "found": 215,
+        "tpr": 0.43,
+        "n_called": 273,
+        "called_outside_goal": 58,
+        "called_other_planted": 7,
+        "called_not_planted": 51,
+        "called_hidden_factor": 0,
+        "false_call_rate": 0.186813186813187,
+        "effect_scale": "log2 difference of differences, last levels vs references",
+        "estimate_cor": 0.926643109253298,
+        "sign_agreement": 0.982
+      },
+      "warnings": [],
+      "secondary": {
+        "engine": {
+          "engine": "edger",
+          "package": "edgeR",
+          "version": "4.0.16",
+          "language": "R",
+          "call": "y <- normLibSizes(DGEList(counts)); estimateDisp(y, X); fit <- glmQLFit(y, X); glmQLFTest(fit, coef = <coefficient>); topTags(n = Inf), X = model.matrix(~1 + treatment + treatment2 + block + treatment:treatment2)",
+          "formula": "y ~ treatment * treatment2 + block",
+          "model": "negative-binomial GLM with quasi-likelihood dispersion; TMM normalisation; empirical-Bayes QL dispersions",
+          "input": "raw integer counts, 5000 features x 16 units",
+          "assumptions": "raw integer counts, one library per experimental unit; fixed effects",
+          "test_statistic": "quasi-likelihood F per coefficient",
+          "multiple_testing": "Benjamini-Hochberg (topTags)",
+          "estimate_scale": "log2 fold change",
+          "random_terms": "none: fixed terms only",
+          "design_fit": "full",
+          "design_fit_note": null,
+          "experimental_unit": "plant",
+          "n_units": 16,
+          "fallback_used": false,
+          "not_used": {
+            "bioana_native": "Bioana's own code: off unless allow_fallback = TRUE"
+          },
+          "reference": "Chen, Lun & Smyth 2016, F1000Research 5:1438; edgeR User's Guide",
+          "tutorial": "docs/engines/edger.md"
+        },
+        "concordance": {
+          "n_shared": 5000,
+          "estimate_cor": 1,
+          "sign_agreement": 0.996,
+          "log10p_cor": 0.985,
+          "significant_both": 91,
+          "significant_primary_only": 182,
+          "significant_secondary_only": 0,
+          "jaccard": 0.333
+        },
+        "recovery": null
+      }
+    }
+  },
+  "not_analysed": []
+}

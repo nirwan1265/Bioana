@@ -1,0 +1,4 @@
+bioana: design 'factorial' (y ~ treatment * treatment2 + block)
+  [rnaseq] [DESeq2 1.42.0] {goal interaction, Wald} 5000 features tested, treatmentdrought:treatment2mutant 273 significant
+      goal truth (interaction, terms treatment:treatment2): 215/500 goal features found (tpr 0.43); of 273 called, 7 with another planted effect, 51 with none (19%)
+      secondary edgeR 4.0.16: estimates r 1, significant in both 91, primary only 182, secondary only 0

@@ -1,0 +1,27 @@
+{
+  "outcome": {
+    "scale": "same as the outcome",
+    "n_terms": 299,
+    "covered": 298,
+    "coverage": 0.997,
+    "bias": 3.113,
+    "rmse": 11.4,
+    "cor": 0.857,
+    "nominal": 0.95
+  },
+  "genetics": {
+    "qtn": 10,
+    "testable": 10,
+    "untestable": 0,
+    "epistatic": 0,
+    "true_positives": 6,
+    "tpr": 0.6,
+    "discoveries": 6,
+    "false_positives": 0,
+    "fdr": 0,
+    "sign_agreement": 1,
+    "estimate_cor": 0.886,
+    "ld_r2": 0.5,
+    "window_bp": 0
+  }
+}

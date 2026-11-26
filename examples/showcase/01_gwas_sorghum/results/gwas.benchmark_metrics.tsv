@@ -1,0 +1,2 @@
+fdr_threshold	window_bp	ld_r2	causal_variants	discoveries	true_positive_markers	false_positive_markers	unrecovered_causal_variants	precision	recall	f1
+0.05	0	0.5	10	6	6	0	4	1	0.6	0.75

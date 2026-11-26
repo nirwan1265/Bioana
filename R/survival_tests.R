@@ -15,7 +15,15 @@
   extra_strata <- .ba_survival_strata(sv$strata, p, frame)
   strata_v <- unique(c(if (isTRUE(sr$stratify_by_blocks)) blocks, extra_strata))
   d <- frame[!is.na(frame$y_) & !is.na(frame$event_), , drop = FALSE]
-  if (any(!d$event_ %in% c(0, 1))) return(.ba_competing_tests(d, treat, strata_v, p, design, alpha, sv, sr))
+  comp <- NULL; notes0 <- character()
+  if (any(!d$event_ %in% c(0, 1))) {
+    # competing events: the CIF / Gray / Fine-Gray analysis next to the cause-specific one (competing events
+    # censored: Kaplan-Meier is then survival net of the competing risk, the log-rank and Cox are cause-specific,
+    # as the engine's Cox model)
+    comp <- .ba_competing_tests(d, treat, strata_v, p, design, alpha, sv, sr)
+    d$event_ <- as.integer(d$event_ == 1)
+    notes0 <- "competing events censored here (cause-specific: Kaplan-Meier is survival net of the competing risk); cumulative incidence in the competing-risks block"
+  }
   d$grp_ <- if (length(treat)) interaction(d[treat], drop = TRUE, sep = " / ") else factor(rep("all", nrow(d)))
   lev <- levels(d$grp_); k <- length(lev)
   senv <- list2env(list(strata = survival::strata), parent = baseenv())   # strata() must be visible as a special
@@ -145,6 +153,7 @@
   ev_req <- suppressWarnings(as.numeric(pw$events_required %||% NA))
   if (is.finite(ev_req) && sum(d$event_ == 1) < ev_req) notes <- c(notes, sprintf("%d events observed, %g required by the design (power.events_required): power is below the plan", sum(d$event_ == 1), ev_req))
   flat <- if (length(rows)) do.call(rbind, rows)
+  notes <- c(notes0, notes)
   list(summary = list(status = "run", test = "survival", package = "survival", version = as.character(utils::packageVersion("survival")),
                       groups = as.list(lev), factor = if (length(treat)) paste(treat, collapse = " x ") else NULL, strata = as.list(strata_v),
                       events = sum(d$event_ == 1), events_required = if (is.finite(ev_req)) ev_req, clustered = clustered,
@@ -154,34 +163,44 @@
                       posthoc = if (!is.null(ph)) list(status = "run", adjust = attr(ph, "adjust"), n_comparisons = nrow(ph), n_significant = sum(ph$p_adj < 0.05, na.rm = TRUE),
                                                       families = list(paste(treat, collapse = " x ")), type = attr(ph, "type")),
                       reference = "Kaplan & Meier 1958 JASA 53:457; Mantel 1966 Cancer Chemother Rep 50:163; Cox 1972 JRSS B 34:187; Grambsch & Therneau 1994 Biometrika 81:515; Royston & Parmar 2013 BMC Med Res Methodol 13:152; Therneau survival (CRAN)",
-                      tutorial = "docs/engines/survival.md", note = if (length(notes)) paste(notes, collapse = "; ")),
-       posthoc = ph, flat = flat, stat_table = flat, km_curve = curve, survival_summary = summ, landmarks = land, life_table = life)
+                      tutorial = "docs/engines/survival.md", note = if (length(notes)) paste(notes, collapse = "; "),
+                      also = if (!is.null(comp)) list(comp$summary)),
+       posthoc = ph, flat = flat, stat_table = flat, km_curve = curve, survival_summary = summ, landmarks = land, life_table = life,
+       cif_curve = comp$cif_curve, competing_table = comp$flat)
 }
 
 # Weighted log-rank by name (survMisc::comp rows; peto also = survdiff rho = 1).
-.ba_weighted_logrank <- function(d, w) {
+.ba_weighted_logrank <- function(d, w, strata = NULL) {
   # k-sample weighted log-rank in base R (no survMisc): U_g = sum w (d_g - n_g d / n), V from the hypergeometric
   # variance; weights at each event time: logrank 1, gehan n, tarone_ware sqrt(n), fh_p_q S(t-)^p (1 - S(t-))^q
   # with S the pooled Kaplan-Meier just before t (Fleming & Harrington 1991; Klein & Moeschberger 7.3).
-  # Equal to survMisc::comp and survival::survdiff (tests). peto keeps survdiff(rho = 1).
-  if (identical(w, "peto")) { x <- survival::survdiff(survival::Surv(y_, event_) ~ grp_, data = d, rho = 1); df <- length(x$n) - 1
+  # strata: U and V summed over strata, each with its own pooled KM (stratified test). Equal to survMisc::comp
+  # and survival::survdiff (tests). peto keeps survdiff(rho = 1).
+  if (identical(w, "peto") && is.null(strata)) { x <- survival::survdiff(survival::Surv(y_, event_) ~ grp_, data = d, rho = 1); df <- length(x$n) - 1
     return(list(chisq = x$chisq, df = df, p = stats::pchisq(x$chisq, df, lower.tail = FALSE))) }
   fh <- regmatches(w, regexec("^fh_([0-9.]+)_([0-9.]+)$", w))[[1]]
+  if (identical(w, "peto")) fh <- c("fh_1_0", "1", "0")   # stratified: Peto-Peto ~ FH(1, 0)
   if (!length(fh) && !w %in% c("logrank", "gehan", "tarone_ware"))
     return(sprintf("weighted log-rank '%s' is not a known weight (survival_rules.json logrank_weight)", w))
   g <- droplevels(as.factor(d$grp_)); k <- nlevels(g); if (k < 2) return("weighted log-rank needs 2 or more groups")
-  tt <- sort(unique(d$y_[d$event_ == 1]))
-  nr <- vapply(tt, function(t) d$y_ >= t, logical(nrow(d)))            # at risk, rows x times
-  ev <- vapply(tt, function(t) d$y_ == t & d$event_ == 1, logical(nrow(d)))
-  G <- stats::model.matrix(~ g - 1)                                    # rows x groups
-  ng <- t(G) %*% nr; dg <- t(G) %*% ev; n <- colSums(nr); dd <- colSums(ev)
-  s_minus <- c(1, cumprod(1 - dd / n))[seq_along(tt)]                   # pooled KM just before each event time
-  wt <- if (length(fh)) s_minus^as.numeric(fh[2]) * (1 - s_minus)^as.numeric(fh[3]) else switch(w, logrank = rep(1, length(tt)), gehan = n, tarone_ware = sqrt(n))
-  idx <- seq_len(k - 1)
-  U <- as.vector((dg - ng * rep(dd / n, each = k)) %*% wt)[idx]
-  vf <- wt^2 * dd * ifelse(n > 1, (n - dd) / (n - 1), 0) / n
-  V <- matrix(0, k - 1, k - 1)
-  for (a in idx) for (b in idx) V[a, b] <- sum(vf * ng[a, ] * ((a == b) - ng[b, ] / n))
+  one <- function(dd, gg) {
+    tt <- sort(unique(dd$y_[dd$event_ == 1])); if (!length(tt)) return(NULL)
+    nr <- vapply(tt, function(t) dd$y_ >= t, logical(nrow(dd))); ev <- vapply(tt, function(t) dd$y_ == t & dd$event_ == 1, logical(nrow(dd)))
+    if (is.null(dim(nr))) { nr <- matrix(nr, nrow = nrow(dd)); ev <- matrix(ev, nrow = nrow(dd)) }
+    G <- stats::model.matrix(~ gg - 1)
+    ng <- t(G) %*% nr; dg <- t(G) %*% ev; n <- colSums(nr); dd_ <- colSums(ev)
+    s_minus <- c(1, cumprod(1 - dd_ / n))[seq_along(tt)]
+    wt <- if (length(fh)) s_minus^as.numeric(fh[2]) * (1 - s_minus)^as.numeric(fh[3]) else switch(w, logrank = rep(1, length(tt)), gehan = n, tarone_ware = sqrt(n))
+    idx <- seq_len(k - 1)
+    U <- as.vector((dg - ng * rep(dd_ / n, each = k)) %*% wt)[idx]
+    vf <- wt^2 * dd_ * ifelse(n > 1, (n - dd_) / (n - 1), 0) / n
+    V <- matrix(0, k - 1, k - 1)
+    for (a in idx) for (b in idx) V[a, b] <- sum(vf * ng[a, ] * ((a == b) - ng[b, ] / n))
+    list(U = U, V = V)
+  }
+  parts <- if (is.null(strata)) list(one(d, g)) else lapply(split(seq_len(nrow(d)), droplevels(interaction(d[strata], drop = TRUE))), function(i) one(d[i, , drop = FALSE], g[i]))
+  parts <- Filter(Negate(is.null), parts)
+  U <- Reduce(`+`, lapply(parts, `[[`, "U")); V <- Reduce(`+`, lapply(parts, `[[`, "V"))
   chisq <- as.numeric(t(U) %*% MASS::ginv(V) %*% U); df <- k - 1
   list(chisq = chisq, df = df, p = stats::pchisq(chisq, df, lower.tail = FALSE))
 }
@@ -310,36 +329,62 @@
 # the phases. Detection: the prespecified weighted log-rank; estimate: piecewise Cox split at change_time, the HR of
 # the affected phase against the true HR (log scale), the other phase reported.
 .ba_goal_recovery_nonph <- function(out, gt, om, goal, design, frame, p, res, alpha) {
-  w <- design$spec$analysis$survival$logrank_weight %||% sub("^logrank_", "", goal$effect$test %||% "")
+  # Non-proportional hazards (Simitall delayed_effect / early_effect / crossing): detection by the prespecified
+  # weighted log-rank (joint over the tested factors' groups; per factor stratified on the others), estimate by
+  # a piecewise Cox fit split at change_time with a before / after term per tested two-level factor (robust SEs
+  # by the unit when subsamples share one), each against Simitall's hazard_ratios (or true_effect).
+  w <- design$spec$analysis$survival$logrank_weight %||% om$logrank_weight %||% sub("^logrank_", "", goal$effect$test %||% "")
   fam <- om$family %||% "delayed_effect"; t0 <- suppressWarnings(as.numeric(om$change_time %||% goal$effect$change_time))
   treat <- names(p$col)[vapply(names(p$col), function(v) identical(p$role[[v]] %||% "treatment", "treatment") && v %in% names(frame) && !is.numeric(frame[[v]]), logical(1))]
-  if (!length(treat)) return(out)
+  tested <- intersect(unique(unlist(lapply(unlist(goal$tested_terms %||% out$tested_terms %||% treat), function(t) all.vars(str2lang(t))))), treat)
+  if (!length(tested)) tested <- treat[1]
+  if (!length(tested)) return(out)
   d <- frame[!is.na(frame$y_) & !is.na(frame$event_), , drop = FALSE]
-  d$grp_ <- droplevels(factor(d[[treat[1]]])); lev <- levels(d$grp_)
-  cox_hr <- out$estimate
-  out$proportional_hazards <- FALSE; out$cox_hr_average <- cox_hr
-  notes <- sprintf("hazards not proportional (%s): one Cox HR (%s) averages the phases", fam, if (is.null(cox_hr)) "NA" else format(signif(cox_hr, 3)))
+  d$event_ <- as.integer(d$event_ == 1)
+  for (v in tested) d[[v]] <- droplevels(factor(d[[v]]))
+  two <- tested[vapply(tested, function(v) nlevels(d[[v]]) == 2L, logical(1))]
+  hr_true <- function(v) { h <- gt$hazard_ratios[[v]]; if (length(h)) as.numeric(h[[levels(d[[v]])[2]]] %||% NA) else as.numeric(unlist(gt$true_effect))[1] }
+  # Cox HR from the engine (one average over the phases), per tested term
+  cox_avg <- vapply(two, function(v) { r <- res[res$term == paste0(v, levels(d[[v]])[2]), , drop = FALSE]; if (nrow(r)) exp(r$estimate[1]) else NA_real_ }, 0)
+  out$proportional_hazards <- FALSE; out$cox_hr_average <- as.list(cox_avg)
+  notes <- sprintf("hazards not proportional (%s): one Cox HR (%s) averages the phases", fam,
+                   if (all(is.na(cox_avg))) "NA" else paste(sprintf("%s %s", names(cox_avg), format(signif(cox_avg, 3))), collapse = ", "))
   if (nzchar(w)) {
+    d$grp_ <- interaction(d[tested], drop = TRUE, sep = " / ")
     wr <- .ba_weighted_logrank(d, w)
-    if (!is.character(wr)) { out$p <- wr$p; out$detected <- isTRUE(wr$p < alpha); out$test <- sprintf("weighted log-rank %s (prespecified)", w) }
-    else notes <- c(notes, wr)
+    if (!is.character(wr)) {
+      out$p <- wr$p; out$detected <- isTRUE(wr$p < alpha)
+      out$test <- sprintf("weighted log-rank %s (prespecified)%s", w, if (length(tested) > 1) sprintf(", joint over %d groups", nlevels(d$grp_)) else "")
+      if (length(tested) > 1) out$weighted_logrank_by_factor <- lapply(tested, function(v) {
+        dv <- d; dv$grp_ <- dv[[v]]; r <- .ba_weighted_logrank(dv, w, strata = setdiff(tested, v))
+        if (is.character(r)) list(term = v, note = r) else list(term = v, chisq = r$chisq, df = r$df, p = r$p, stratified_on = paste(setdiff(tested, v), collapse = ", ")) })
+    } else notes <- c(notes, wr)
   }
-  if (is.finite(t0) && length(lev) == 2L) {
+  if (is.finite(t0) && length(two)) {
     sf <- stats::as.formula("Surv(y_, event_) ~ .", env = list2env(list(Surv = survival::Surv), parent = baseenv()))   # survSplit wants a literal Surv() on the left
-    sp <- survival::survSplit(sf, data = d[c("y_", "event_", "grp_")], cut = t0, episode = "phase_", start = "tstart_")
-    trt <- as.numeric(sp$grp_ == lev[2])
-    sp$hr_before_ <- trt * (sp$phase_ == 1); sp$hr_after_ <- trt * (sp$phase_ == 2)
-    pc <- tryCatch(survival::coxph(survival::Surv(tstart_, y_, event_) ~ hr_before_ + hr_after_, data = sp), error = function(e) NULL)
+    unit <- intersect(c("unit_id_", design$spec$analysis$survival$cluster), names(d))[1]
+    keep <- unique(c("y_", "event_", two, if (!is.na(unit)) unit))
+    sp <- survival::survSplit(sf, data = d[keep], cut = t0, episode = "phase_", start = "tstart_")
+    cv <- character()
+    for (v in two) { x <- as.numeric(sp[[v]] == levels(d[[v]])[2]); sp[[paste0(v, "__before")]] <- x * (sp$phase_ == 1); sp[[paste0(v, "__after")]] <- x * (sp$phase_ == 2); cv <- c(cv, paste0(v, c("__before", "__after"))) }
+    # bare Surv() / cluster() in an environment that has them: coxph only recognizes the cluster() special unqualified
+    fml <- stats::as.formula(paste("Surv(tstart_, y_, event_) ~", paste(cv, collapse = " + "), if (!is.na(unit)) sprintf("+ cluster(%s)", unit) else ""),
+                             env = list2env(list(Surv = survival::Surv, cluster = survival::cluster), parent = baseenv()))
+    pc <- tryCatch(survival::coxph(fml, data = sp), error = function(e) NULL)
     if (!is.null(pc)) {
-      b <- stats::coef(pc); se <- sqrt(diag(stats::vcov(pc)))
-      aff <- if (fam %in% c("early_effect", "crossing")) "hr_before_" else "hr_after_"
-      tl <- suppressWarnings(as.numeric(unlist(gt$true_log_hazard_ratio))); if (!length(tl)) tl <- log(as.numeric(unlist(gt$true_effect)))
-      out$estimate <- unname(exp(b[aff])); out$true_effect <- exp(tl)
-      out$bias <- unname(b[aff] - tl); out$covered <- unname(abs(b[aff] - tl) <= stats::qnorm(1 - alpha / 2) * se[aff])
-      out$sign_agreement <- unname(sign(b[aff]) == sign(tl))
-      out$piecewise <- list(change_time = t0, hr_before = unname(exp(b["hr_before_"])), hr_after = unname(exp(b["hr_after_"])),
-                            affected_phase = if (aff == "hr_after_") "after" else "before")
-      out$scale <- sprintf("hazard ratio %s t = %g (piecewise Cox split at change_time; log scale)", if (aff == "hr_after_") "after" else "before", t0)
+      b <- stats::coef(pc); se <- sqrt(diag(stats::vcov(pc))); q <- stats::qnorm(1 - alpha / 2)
+      aff <- if (fam %in% c("early_effect", "crossing")) "__before" else "__after"
+      tab <- do.call(rbind, lapply(two, function(v) { k <- paste0(v, aff); tv <- hr_true(v)
+        data.frame(term = v, level = levels(d[[v]])[2], true_hr = tv, estimate = unname(exp(b[k])), ci_low = unname(exp(b[k] - q * se[k])), ci_high = unname(exp(b[k] + q * se[k])),
+                   covered = unname(abs(b[k] - log(tv)) <= q * se[k]), hr_other_phase = unname(exp(b[paste0(v, if (aff == "__after") "__before" else "__after")])),
+                   cox_hr_average = unname(cox_avg[v]), stringsAsFactors = FALSE) }))
+      out$estimate <- tab$estimate[1]; out$true_effect <- tab$true_hr[1]; out$covered <- all(tab$covered)
+      out$bias <- log(tab$estimate[1]) - log(tab$true_hr[1]); out$sign_agreement <- all(sign(log(tab$estimate)) == sign(log(tab$true_hr)))
+      out$piecewise <- list(change_time = t0, affected_phase = if (aff == "__after") "after" else "before", robust_by = if (!is.na(unit)) unit,
+                            terms = lapply(seq_len(nrow(tab)), function(i) as.list(tab[i, ])),
+                            hr_before = if (aff == "__after") tab$hr_other_phase[1] else tab$estimate[1], hr_after = if (aff == "__after") tab$estimate[1] else tab$hr_other_phase[1])
+      out$scale <- sprintf("hazard ratio %s t = %g (piecewise Cox split at change_time; log scale)%s", if (aff == "__after") "after" else "before", t0,
+                           if (nrow(tab) > 1) sprintf("; estimate / true_effect = %s, all %d terms in piecewise$terms", tab$term[1], nrow(tab)) else "")
     }
   } else if (!is.finite(t0)) notes <- c(notes, "no change_time in the truth: no piecewise estimate")
   out$note <- paste(c(out$note, notes), collapse = "; ")
@@ -353,4 +398,45 @@
   intersect(unlist(lapply(unlist(strata), function(s) {
     v <- names(p$col)[vapply(names(p$col), function(v) identical(v, s) || identical(as.character(p$col[[v]]), s), logical(1))]
     if (length(v)) v else s })), names(frame))
+}
+
+# Per-group survival truth (Simitall outcome_model.groups / goal_truth.groups, keyed "a:b" by the treatment
+# cells): median, survival net of competing events at the landmark days (Kaplan-Meier with competing events
+# censored), cumulative incidence of the event (cmprsk::cuminc), RMST to the truth's horizon. Intervals: KM
+# log-log / Greenwood, cuminc variance; they treat subsamples as independent (too narrow with shared frailties).
+.ba_survival_group_recovery <- function(groups, frame, p, alpha = 0.05, tau = NULL) {
+  if (!length(groups)) return(NULL)
+  treat <- names(p$col)[vapply(names(p$col), function(v) identical(p$role[[v]] %||% "treatment", "treatment") && v %in% names(frame) && !is.numeric(frame[[v]]), logical(1))]
+  d <- frame[!is.na(frame$y_) & !is.na(frame$event_), , drop = FALSE]
+  ev_raw <- d$event_raw_ %||% d$event_
+  d$e1_ <- as.integer(ev_raw == 1)
+  d$cell_ <- if (length(treat)) do.call(paste, c(lapply(d[treat], as.character), sep = ":")) else "all"
+  q <- stats::qnorm(1 - alpha / 2); rows <- list()
+  add <- function(g, m, tv, est, lo, hi) rows[[length(rows) + 1L]] <<- data.frame(group = g, measure = m, true = as.numeric(tv), estimate = as.numeric(est), ci_low = as.numeric(lo),
+                                                                                 ci_high = as.numeric(hi), stringsAsFactors = FALSE)
+  for (g in intersect(names(groups), unique(d$cell_))) {
+    gt <- groups[[g]]; dg <- d[d$cell_ == g, , drop = FALSE]
+    # Simitall: median = the event alone (net of competing events: KM with them censored); survival_at and rmst
+    # = free of any event (KM of the first event of any kind), as its truth computes them
+    km <- survival::survfit(survival::Surv(y_, e1_) ~ 1, data = dg, conf.type = "log-log", conf.int = 1 - alpha)
+    ka <- survival::survfit(survival::Surv(y_, as.integer(ev_raw[d$cell_ == g] > 0)) ~ 1, data = dg, conf.type = "log-log", conf.int = 1 - alpha)
+    tb <- summary(km)$table
+    if (!is.null(gt$median)) add(g, "median (event alone)", gt$median, tb[["median"]], tb[[grep("LCL", names(tb), value = TRUE)[1]]], tb[[grep("UCL", names(tb), value = TRUE)[1]]])
+    for (t in names(gt$survival_at)) { s <- summary(ka, times = as.numeric(t), extend = TRUE)
+      add(g, sprintf("event-free survival at %s", t), gt$survival_at[[t]], s$surv, s$lower, s$upper) }
+    if (!is.null(gt$rmst)) { ta <- if (length(tau) && is.finite(tau)) tau else max(dg$y_)
+      r <- summary(ka, rmean = ta)$table; add(g, sprintf("event-free RMST to %g", ta), gt$rmst, r[["rmean"]], r[["rmean"]] - q * r[["se(rmean)"]], r[["rmean"]] + q * r[["se(rmean)"]]) }
+    if (length(gt$cif_event_at) && requireNamespace("cmprsk", quietly = TRUE) && any(ev_raw[d$cell_ == g] > 1)) {
+      ci <- cmprsk::cuminc(dg$y_, ev_raw[d$cell_ == g], cencode = 0)
+      tp <- cmprsk::timepoints(ci, as.numeric(names(gt$cif_event_at)))
+      k <- grep(" 1$", rownames(tp$est))[1]
+      for (j in seq_along(gt$cif_event_at)) { e <- tp$est[k, j]; v <- tp$var[k, j]
+        add(g, sprintf("cumulative incidence at %s", names(gt$cif_event_at)[j]), gt$cif_event_at[[j]], e, e - q * sqrt(v), e + q * sqrt(v)) }
+    }
+  }
+  if (!length(rows)) return(NULL)
+  out <- do.call(rbind, rows)
+  # a median not reached has no estimate but an open interval [lcl, Inf): covered when the truth lies in it
+  out$covered <- !is.na(out$ci_low) & out$true >= out$ci_low & (is.na(out$ci_high) | out$true <= out$ci_high) & (!is.na(out$estimate) | is.na(out$ci_high))
+  out
 }

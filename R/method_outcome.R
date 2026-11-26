@@ -189,7 +189,7 @@
     st <- tryCatch(if (type == "survival") { fr <- frame; fr$event_ <- fr$event_raw_ %||% fr$event_; .ba_survival_tests(fr, design$parsed, design, goal, alpha, args, fit) }
                    else .ba_stat_tests(frame, p_stat, design, goal, alpha, type, args),
                    error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
-    for (k in c("km_curve", "survival_summary", "landmarks", "life_table", "cif_curve", "cells")) if (!is.null(st[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(st[[k]], file.path(outdir, paste0(k, ".tsv"))), k))
+    for (k in c("km_curve", "survival_summary", "landmarks", "life_table", "cif_curve", "competing_table", "cells")) if (!is.null(st[[k]])) paths <- c(paths, stats::setNames(.ba_write_tsv(st[[k]], file.path(outdir, paste0(k, ".tsv"))), k))
     if (!is.null(st$descriptives)) paths <- c(paths, descriptives = .ba_write_tsv(st$descriptives, file.path(outdir, "descriptives.tsv")))
     if (!is.null(st$stat_table)) paths <- c(paths, stat_tests = .ba_write_tsv(st$stat_table, file.path(outdir, "stat_tests.tsv")))
     if (!is.null(st$anova_table)) paths <- c(paths, anova_table = .ba_write_tsv(st$anova_table, file.path(outdir, "anova_table.tsv")))
@@ -268,6 +268,15 @@
           summary$goal_recovery$odds_ratios <- orr$table
           if (nrow(orr$table) == 1L) summary$goal_recovery[c("estimate", "true_effect", "covered")] <- list(orr$table$estimate, orr$table$true_or, orr$table$covered)
           summary$goal_recovery$scale <- orr$scale
+        }
+      }
+      if (type == "survival" && length(gt$groups %||% truth$outcome_model$groups)) {
+        sgr <- .ba_survival_group_recovery(gt$groups %||% truth$outcome_model$groups, frame, p, alpha, tau = suppressWarnings(as.numeric(truth$outcome_model$rmst_tau %||% NA)) %||% NULL)
+        if (!is.null(sgr)) {
+          paths[["survival_groups"]] <- .ba_write_tsv(sgr, file.path(outdir, "survival_group_recovery.tsv"))
+          summary$goal_recovery$groups <- list(covered = sum(sgr$covered), measures = nrow(sgr),
+                                               by_measure = lapply(split(sgr, trimws(sub(" (at|to) .*$| \\(.*$", "", sgr$measure))), function(x) list(covered = sum(x$covered), n = nrow(x))),
+                                               note = "per treatment cell vs Simitall outcome_model.groups; intervals treat subsamples as independent")
         }
       }
       if (isFALSE(diag_engine$converged)) { summary$goal_recovery$scored <- FALSE

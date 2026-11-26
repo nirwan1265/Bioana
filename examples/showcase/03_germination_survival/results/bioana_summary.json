@@ -1,0 +1,657 @@
+{
+  "bioana_version": "0.14.0",
+  "design": "factorial",
+  "model": "y ~ treatment * treatment2 + (1 | block)",
+  "handoff_version": "0.6.8",
+  "manifest": "simitall 0.1.0",
+  "alpha": 0.05,
+  "analyses": {
+    "outcome": {
+      "data_type": "outcome",
+      "outcome_type": "survival",
+      "response": "primary_outcome",
+      "method": "coxme (Cox proportional hazards)",
+      "model_fitted": "survival::Surv(y_, event_) ~ treatment + treatment2 + treatment:treatment2 + (1 | block) + (1 | unit_id_)",
+      "n_rows": 480,
+      "n_units_fitted": 480,
+      "subsamples": "nest",
+      "dropped_samples": [],
+      "engine": {
+        "engine": "coxme",
+        "package": "coxme",
+        "version": "2.2.22",
+        "language": "R",
+        "call": "(function (formula, data, weights, subset, na.action, init, control,      ties = c(\"efron\", \"breslow\"), varlist, vfixed, vinit, x = FALSE,      y = TRUE, refine.n = 0, random, fixed, variance, ...)  {     ties <- match.arg(ties)     Call <- match.call()     if (!missing(fixed)) {         if (missing(formula)) {             formula <- fixed             warning(\"The 'fixed' argument of coxme is depreciated\")         }         else stop(\"Both a fixed and a formula argument are present\")     }     if (!missing(random)) {         warning(\"The random argument of coxme is depreciated\")         if (!inherits(random, \"formula\") || length(random) !=              2)              stop(\"Invalid random formula\")         j <- length(formula)         formula[[j]] <- call(\"+\", formula[[j]], call(\"(\", random[[2]]))     }     if (!missing(variance)) {         warning(\"The variance argument of coxme is depreciated\")         vfixed <- variance     }     temp <- call(\"model.frame\", formula = subbar(formula))     for (i in c(\"data\", \"subset\", \"weights\", \"na.action\")) if (!is.null(Call[[i]]))          temp[[i]] <- Call[[i]]     m <- eval.parent(temp)     Y <- model.extract(m, \"response\")     n <- nrow(Y)     if (n == 0)          stop(\"No observations remain in the data set\")     if (!inherits(Y, \"Surv\"))          stop(\"Response must be a survival object\")     type <- attr(Y, \"type\")     if (type != \"right\" && type != \"counting\")          stop(paste(\"Cox model doesn't support '\", type, \"' survival data\",              sep = \"\"))     weights <- model.weights(m)     if (length(weights) == 0)          weights <- rep(1, n)     else if (any(weights <= 0))          stop(\"Negative or zero weights are not allowed\")     offset <- model.offset(m)     if (length(offset) == 0)          offset <- rep(0, n)     pterms <- sapply(m, inherits, \"coxph.penalty\")     if (any(pterms)) {         stop(\"You cannot have penalized terms in coxme\")     }     if (missing(control))          control <- coxme.control(...)     if (missing(init))          init <- NULL     flist <- formula1(formula)     if (hasAbar(flist$fixed))          stop(\"Invalid formula: a '|' outside of a valid random effects term\")     special <- c(\"strata\", \"cluster\")     Terms <- terms(flist$fixed, special)     attr(Terms, \"intercept\") <- 1     strats <- attr(Terms, \"specials\")$strata     cluster <- attr(Terms, \"specials\")$cluster     if (length(cluster)) {         stop(\"A cluster() statement is invalid in coxme\")     }     if (length(strats)) {         temp <- untangle.specials(Terms, \"strata\", 1)         if (length(temp$vars) == 1)              strata.keep <- m[[temp$vars]]         else strata.keep <- strata(m[, temp$vars], shortlabel = T)         strats <- as.numeric(strata.keep)         X <- model.matrix(Terms[-temp$terms], m)[, -1, drop = F]     }     else X <- model.matrix(Terms, m)[, -1, drop = F]     nrandom <- length(flist$random)     if (nrandom == 0)          stop(\"No random effects terms found\")     vparm <- vector(\"list\", nrandom)     is.variance <- rep(TRUE, nrandom)     ismat <- function(x) {         inherits(x, c(\"matrix\", \"bdsmatrix\", \"Matrix\"), which = FALSE)     }     if (missing(varlist) || is.null(varlist)) {         varlist <- vector(\"list\", nrandom)         for (i in 1:nrandom) varlist[[i]] <- coxmeFull()     }     else {         if (is.function(varlist))              varlist <- varlist()         if (inherits(varlist, \"coxmevar\"))              varlist <- list(varlist)         else if (ismat(varlist))              varlist <- list(coxmeMlist(list(varlist)))         else {             if (!is.list(varlist))                  stop(\"Invalid varlist argument\")             if (all(sapply(varlist, ismat))) {                 if (nrandom > 1)                    stop(paste(\"An unlabeled list of matrices is\",                      \"ambiguous when there are multiple random terms\"))                 else varlist <- list(coxmeMlist(varlist))             }             else {                 for (i in 1:length(varlist)) {                   if (is.function(varlist[[i]]))                      varlist[[i]] <- varlist[[i]]()                   if (ismat(varlist[[i]]))                      varlist[[i]] <- coxmeMlist(list(varlist[[i]]))                   if (!inherits(varlist[[i]], \"coxmevar\")) {                     if (is.list(varlist[[i]])) {                       if (all(sapply(varlist[[i]], ismat)))                          varlist[[i]] <- coxmeMlist(varlist[[i]])                       else stop(\"Invalid varlist element\")                     }                     else stop(\"Invalid varlist element\")                   }                 }             }         }         while (length(varlist) < nrandom) varlist <- c(varlist,              list(coxmeFull()))     }     if (!is.null(names(varlist))) {         vname <- names(varlist)         stop(\"Cannot (yet) have a names varlist\")         indx <- pmatch(vname, names(random), nomatch = 0)         if (any(indx == 0 & vname != \"\"))              stop(paste(\"Varlist element not matched:\", vname[indx ==                  0 & vname != \"\"]))         if (any(indx > 0)) {             temp <- vector(\"list\", nrandom)             temp[indx] <- varlist[indx > 0]             temp[-indx] <- varlist[indx == 0]             varlist <- temp         }     }     check <- sapply(varlist, function(x) {         fname <- c(\"initialize\", \"generate\", \"wrapup\")         indx <- match(fname, names(x))         if (any(is.na(x)))              stop(paste(\"Member not found in variance function:\",                  fname(is.na(indx))))         if (length(x) != 3 || any(!sapply(x, is.function)))              stop(\"Varlist objects must consist of exaclty three functions\")     })     getcmat <- function(x, mf) {         if (is.null(x) || x == 1)              return(NULL)         Terms <- terms(eval(call(\"~\", x)))         attr(Terms, \"intercept\") <- 0         varnames <- attr(Terms, \"term.labels\")         ftemp <- sapply(mf[varnames], is.factor)         if (any(ftemp)) {             clist <- lapply(mf[varnames[ftemp]], function(x) diag(length(levels(x))))             model.matrix(Terms, mf, contrasts.arg = clist)         }         else model.matrix(Terms, mf)     }     getGroupNames <- function(x) {         if (is.call(x) && x[[1]] == as.name(\"/\"))              c(getGroupNames(x[[2]]), getGroupNames(x[[3]]))         else deparse(x)     }     getgroups <- function(x, mf) {         if (is.numeric(x))              return(NULL)         varname <- getGroupNames(x)         indx <- match(varname, names(mf), nomatch = 0)         if (any(indx == 0))              stop(paste(\"Invalid grouping factor\", varname[indx ==                  0]))         else data.frame(lapply(mf[indx], as.factor))     }     if (missing(vinit) || is.null(vinit))          vinit <- vector(\"list\", nrandom)     else {         if (nrandom == 1) {             if (is.numeric(vinit))                  vinit <- list(vinit)             else if (is.list(vinit))                  vinit <- list(unlist(vinit))         }         if (!is.list(vinit))              stop(\"Invalid value for `vinit` parameter\")         if (length(vinit) > nrandom)              stop(paste(\"Vinit must be a list of length\", nrandom))         if (!all(sapply(vinit, function(x) (is.null(x) || is.numeric(x)))))              stop(\"Vinit must contain numeric values\")         if (length(vinit) < nrandom)              vinit <- c(vinit, vector(\"list\", nrandom - length(vinit)))         tname <- names(vinit)         if (!is.null(tname)) {             stop(\"Named initial values not yet supported\")         }     }     if (missing(vfixed) || is.null(vfixed))          vfixed <- vector(\"list\", nrandom)     else {         if (nrandom == 1) {             if (is.numeric(vfixed))                  vfixed <- list(vfixed)             else if (is.list(vfixed))                  vfixed <- list(unlist(vfixed))         }         if (!is.list(vfixed))              stop(\"Invalid value for `vfixed` parameter\")         if (length(vfixed) > nrandom)              stop(paste(\"Vfixed must be a list of length\", nrandom))         if (!all(sapply(vfixed, function(x) (is.null(x) || is.numeric(x)))))              stop(\"Vfixed must contain numeric values\")         if (length(vfixed) < nrandom)              vfixed <- c(vfixed, vector(\"list\", nrandom - length(vfixed)))         tname <- names(vfixed)         if (!is.null(tname)) {             temp <- pmatch(tname, names(flist$random), nomatch = 0)             temp <- c(temp, (1:nrandom)[-temp])             vfixed <- vfixed[temp]         }     }     newzmat <- function(xmat, xmap) {         n <- nrow(xmap)         newz <- matrix(0, nrow = n, ncol = max(xmap))         for (i in 1:ncol(xmap)) newz[cbind(1:n, xmap[, i])] <- xmat[,              i]         newz     }     fmat <- zmat <- matrix(0, nrow = n, ncol = 0)     ntheta <- integer(nrandom)     ncoef <- matrix(0L, nrandom, 2, dimnames = list(NULL, c(\"intercept\",          \"slope\")))     itheta <- NULL     for (i in 1:nrandom) {         f2 <- formula2(flist$random[[i]])         if (f2$intercept & f2$group == 1)              stop(paste(\"Error in random term \", i, \": Random intercepts require a grouping variable\",                  sep = \"\"))         vfun <- varlist[[i]]         if (!is.null(f2$interaction))              stop(\"Interactions not yet written\")         cmat <- getcmat(f2$fixed, m)         groups <- getgroups(f2$group, m)         ifun <- vfun$initialize(vinit[[i]], vfixed[[i]], intercept = f2$intercept,              groups, cmat, control)         if (!is.null(ifun$error))              stop(paste(\"In random term \", i, \": \", ifun$error,                  sep = \"\"))         vparm[[i]] <- ifun$parms         if (!is.null(ifun$is.variance))              is.variance[i] <- ifun$is.variance         itheta <- c(itheta, ifun$theta)         ntheta[i] <- length(ifun$theta)         if (f2$intercept) {             if (!is.matrix(ifun$imap) || nrow(ifun$imap) != n)                  stop(paste(\"In random term \", i, \": Invalid intercept matrix F\",                    sep = \"\"))             temp <- sort(unique(c(ifun$imap)))             if (any(temp != 1:length(temp)))                  stop(paste(\"In random term \", i, \": intercept matrix has an invalid element\",                    sep = \"\"))             if (ncol(fmat) > 0)                  fmat <- cbind(fmat, ifun$imap + max(fmat))             else fmat <- ifun$imap             ncoef[i, 1] <- 1 + max(ifun$imap) - min(ifun$imap)         }         if (length(cmat) > 0) {             if (is.null(ifun$xmap) || is.null(ifun$X) || !is.matrix(ifun$xmap) ||                  !is.matrix(ifun$X) || nrow(ifun$xmap) != n ||                  nrow(ifun$X) != n || ncol(ifun$xmap) != ncol(ifun$X))                  stop(paste(\"In random term \", i, \"invalid X/xmap pair\"))             if (f2$intercept)                  xmap <- ifun$xmap - max(ifun$imap)             else xmap <- ifun$xmap             if (any(sort(unique(c(xmap))) != 1:max(xmap)))                  stop(paste(\"In random term \", i, \": xmap matrix has an invalid element\",                    sep = \"\"))             temp <- newzmat(ifun$X, xmap)             ncoef[i, 2] <- ncol(temp)             zmat <- cbind(zmat, temp)         }     }     if (any(is.variance) & !all(is.variance))          stop(\"All variance terms must have the same is.variance setting\")     fit <- coxme.fit(X, Y, strats, offset, init, control, weights = weights,          ties = ties, row.names(m), fmat, zmat, varlist, vparm,          itheta, ntheta, ncoef, refine.n, is.variance = any(is.variance))     if (is.character(fit)) {         fit <- list(fail = fit)         oldClass(fit) <- \"coxme\"         return(fit)     }     fcoef <- fit$coefficients     nvar <- length(fcoef)     if (length(fcoef) > 0 && any(is.na(fcoef))) {         vars <- (1:length(fcoef))[is.na(fcoef)]         msg <- paste(\"X matrix deemed to be singular; variable\",              paste(vars, collapse = \" \"))         warning(msg)     }     if (length(fcoef) > 0) {         names(fit$coefficients) <- dimnames(X)[[2]]     }     rlinear <- rep(0, nrow(Y))     if (length(fmat)) {         for (i in 1:ncol(fmat)) {             rlinear <- rlinear + fit$frail[fmat[, i]]         }     }     if (length(zmat)) {         indx <- if (length(fmat) > 0)              max(fmat)         else 0         for (i in 1:ncol(zmat)) rlinear <- rlinear + fit$frail[indx +              i] * zmat[, i]     }     if (nvar == 0)          fit$linear.predictor <- rlinear     else fit$linear.predictor <- as.vector(rlinear + c(X %*%          fit$coef))     newtheta <- random.coef <- list()     nrandom <- length(varlist)     sindex <- rep(1:nrandom, ntheta)     bindex <- rep(row(ncoef), ncoef)     for (i in 1:nrandom) {         temp <- varlist[[i]]$wrapup(fit$theta[sindex == i], fit$frail[bindex ==              i], vparm[[i]])         newtheta <- c(newtheta, temp$theta)         if (!is.list(temp$b)) {             temp$b <- list(temp$b)             names(temp$b) <- paste(\"Random\", i, sep = \"\")         }         random.coef <- c(random.coef, temp$b)     }     fit$frail <- random.coef     fit$vcoef <- newtheta     fit$theta <- NULL     fit$n <- c(sum(Y[, ncol(Y)]), nrow(Y))     fit$terms <- Terms     fit$assign <- attr(X, \"assign\")     fit$formulaList <- flist     na.action <- attr(m, \"na.action\")     if (length(na.action))          fit$na.action <- na.action     if (x) {         fit$x <- X         if (length(strats))              fit$strata <- strata.keep     }     if (y)          fit$y <- Y     if (!is.null(weights) && any(weights != 1))          fit$weights <- weights     fit$formula <- as.vector(attr(Terms, \"formula\"))     fit$call <- Call     fit$ties <- ties     names(fit$loglik) <- c(\"NULL\", \"Integrated\", \"Penalized\")     oldClass(fit) <- \"coxme\"     fit })(formula = survival::Surv(y_, event_) ~ treatment + treatment2 +      treatment:treatment2 + (1 | block) + (1 | unit_id_), data = frame)",
+        "formula": "y_ ~ treatment + treatment2 + (1 | block) + (1 | unit_id_) +     treatment:treatment2",
+        "model": "Cox proportional hazards with normal random effects (mixed-effects Cox model)",
+        "input": "survival outcome 'primary_outcome', 480 units",
+        "assumptions": "proportional hazards; independent censoring given the random effects; normal random effects",
+        "test_statistic": "Wald z",
+        "multiple_testing": "Benjamini-Hochberg over treatment coefficients",
+        "estimate_scale": "log hazard ratio",
+        "random_terms": "any lme4-style random terms",
+        "design_fit": "full",
+        "design_fit_note": null,
+        "experimental_unit": "cell",
+        "n_units": 480,
+        "fallback_used": false,
+        "not_used": {
+          "coxph_frailty": "models one random intercept, random terms; the design has block, unit_id_",
+          "coxph": "would drop the random terms (block, unit_id_): only with allow_fallback = TRUE"
+        },
+        "reference": "Therneau TM, coxme (R package); Ripatti & Palmgren 2000, Biometrics 56:1016",
+        "tutorial": "docs/engines/outcome.md"
+      },
+      "diagnostics": {
+        "checks": [
+          {
+            "check": "estimability",
+            "status": "ok",
+            "detail": "4 fixed coefficients, all estimable"
+          },
+          {
+            "check": "residual_df",
+            "status": "ok",
+            "detail": "44 residual degrees of freedom"
+          },
+          {
+            "check": "replication",
+            "status": "ok",
+            "detail": "treatment: 24 to 24 units per level"
+          },
+          {
+            "check": "replication",
+            "status": "ok",
+            "detail": "treatment2: 24 to 24 units per level"
+          },
+          {
+            "check": "random_terms",
+            "status": "ok",
+            "detail": "(block): 12 levels"
+          },
+          {
+            "check": "random_terms",
+            "status": "ok",
+            "detail": "(unit_id_): 48 levels"
+          }
+        ],
+        "n_check_warnings": 0,
+        "fit_warnings": [],
+        "engine": null
+      },
+      "goal": {
+        "id": "survival",
+        "source": "study_spec",
+        "assumed_by_biodes": false,
+        "assumed_why": null,
+        "test": "wald",
+        "effect": {
+          "scale": "hazard_ratio",
+          "definition": "hazard ratio of a level vs the reference (Cox)",
+          "size": 0.6,
+          "proportional_hazards": false,
+          "test": "logrank_fh_0_1"
+        },
+        "scale_note": null,
+        "predictor": null,
+        "coefficients": [
+          "treatmentgenotype_2",
+          "treatment2primed",
+          "treatmentgenotype_2:treatment2primed"
+        ],
+        "dropped_terms": null,
+        "tested_terms": [
+          "treatment",
+          "treatment2",
+          "treatment:treatment2"
+        ],
+        "within": null,
+        "label": null,
+        "note": null,
+        "unknown_to_biodes_registry": null,
+        "effect_scale_used": "log hazard ratio"
+      },
+      "secondary_engine": null,
+      "stat_test": {
+        "status": "run",
+        "test": "survival",
+        "package": "survival",
+        "version": "3.5.8",
+        "groups": [
+          "genotype_1 / not primed",
+          "genotype_2 / not primed",
+          "genotype_1 / primed",
+          "genotype_2 / primed"
+        ],
+        "factor": "treatment x treatment2",
+        "strata": [
+          "block"
+        ],
+        "events": 260,
+        "events_required": 121,
+        "clustered": true,
+        "primary": "stratified log-rank",
+        "table": [
+          {
+            "term": "treatment",
+            "contrast": null,
+            "statistic_name": "log-rank chi-squared",
+            "statistic": 13.8157261630888,
+            "df1": 3,
+            "df2": "NA",
+            "p": 0.00316701965554375,
+            "estimate": "NA",
+            "ci_low": "NA",
+            "ci_high": "NA",
+            "effect_name": null,
+            "effect": "NA",
+            "n": 480
+          },
+          {
+            "term": "treatment",
+            "contrast": null,
+            "statistic_name": "robust score chi-squared (Lin-Wei, clustered by unit)",
+            "statistic": 8.03583828914865,
+            "df1": 3,
+            "df2": "NA",
+            "p": 0.0452768138556474,
+            "estimate": "NA",
+            "ci_low": "NA",
+            "ci_high": "NA",
+            "effect_name": null,
+            "effect": "NA",
+            "n": 480
+          },
+          {
+            "term": "treatment",
+            "contrast": null,
+            "statistic_name": "stratified log-rank chi-squared (strata: block)",
+            "statistic": 12.4982817954372,
+            "df1": 3,
+            "df2": "NA",
+            "p": 0.00585734286503806,
+            "estimate": "NA",
+            "ci_low": "NA",
+            "ci_high": "NA",
+            "effect_name": null,
+            "effect": "NA",
+            "n": 480
+          },
+          {
+            "term": "treatment",
+            "contrast": null,
+            "statistic_name": "weighted log-rank chi-squared (fh_0_1, prespecified)",
+            "statistic": 23.2402400783395,
+            "df1": 3,
+            "df2": "NA",
+            "p": 3.59843803393699e-05,
+            "estimate": "NA",
+            "ci_low": "NA",
+            "ci_high": "NA",
+            "effect_name": null,
+            "effect": "NA",
+            "n": 480
+          },
+          {
+            "term": "treatmentgenotype_2",
+            "contrast": "treatmentgenotype_2",
+            "statistic_name": "hazard ratio (Cox, Wald z)",
+            "statistic": -0.488712277827094,
+            "df1": "NA",
+            "df2": "NA",
+            "p": 0.62504541019622,
+            "estimate": 0.909479563997279,
+            "ci_low": 0.621632125847764,
+            "ci_high": 1.33061507431044,
+            "effect_name": "hazard ratio",
+            "effect": 0.909479563997279,
+            "n": 480
+          },
+          {
+            "term": "treatment2primed",
+            "contrast": "treatment2primed",
+            "statistic_name": "hazard ratio (Cox, Wald z)",
+            "statistic": -0.972110795761806,
+            "df1": "NA",
+            "df2": "NA",
+            "p": 0.330995431938057,
+            "estimate": 0.829812462267119,
+            "ci_low": 0.569675860939298,
+            "ci_high": 1.20873775728965,
+            "effect_name": "hazard ratio",
+            "effect": 0.829812462267119,
+            "n": 480
+          },
+          {
+            "term": "treatmentgenotype_2:treatment2primed",
+            "contrast": "treatmentgenotype_2:treatment2primed",
+            "statistic_name": "hazard ratio (Cox, Wald z)",
+            "statistic": -1.2915636337826,
+            "df1": "NA",
+            "df2": "NA",
+            "p": 0.196508304815199,
+            "estimate": 0.690010587652975,
+            "ci_low": 0.392931951264238,
+            "ci_high": 1.2116973678046,
+            "effect_name": "hazard ratio",
+            "effect": 0.690010587652975,
+            "n": 480
+          }
+        ],
+        "km": [
+          {
+            "group": "genotype_1 / not primed",
+            "n": 120,
+            "events": 75,
+            "median": 14,
+            "median_lcl": 10,
+            "median_ucl": 16,
+            "q25": 8,
+            "q75": "NA",
+            "rmst": 12.696401447275,
+            "rmst_se": 0.59355846922656,
+            "tau": 20,
+            "max_followup": 20
+          },
+          {
+            "group": "genotype_2 / not primed",
+            "n": 120,
+            "events": 67,
+            "median": 14,
+            "median_lcl": 10,
+            "median_ucl": 18,
+            "q25": 6,
+            "q75": "NA",
+            "rmst": 12.7774311616908,
+            "rmst_se": 0.641021947295362,
+            "tau": 20,
+            "max_followup": 20
+          },
+          {
+            "group": "genotype_1 / primed",
+            "n": 120,
+            "events": 71,
+            "median": 16,
+            "median_lcl": 14,
+            "median_ucl": 18,
+            "q25": 8,
+            "q75": "NA",
+            "rmst": 13.7910140342741,
+            "rmst_se": 0.581170972977755,
+            "tau": 20,
+            "max_followup": 20
+          },
+          {
+            "group": "genotype_2 / primed",
+            "n": 120,
+            "events": 47,
+            "median": "NA",
+            "median_lcl": 18,
+            "median_ucl": "NA",
+            "q25": 8,
+            "q75": "NA",
+            "rmst": 14.8803847316677,
+            "rmst_se": 0.630994324243009,
+            "tau": 20,
+            "max_followup": 20
+          }
+        ],
+        "observed_expected": [
+          {
+            "group": "genotype_1 / not primed",
+            "observed": 75,
+            "expected": 60.6041892733873
+          },
+          {
+            "group": "genotype_2 / not primed",
+            "observed": 67,
+            "expected": 60.0651831037317
+          },
+          {
+            "group": "genotype_1 / primed",
+            "observed": 71,
+            "expected": 68.3605765119056
+          },
+          {
+            "group": "genotype_2 / primed",
+            "observed": 47,
+            "expected": 70.9700511109755
+          }
+        ],
+        "cox": {
+          "n": 480,
+          "events": 260,
+          "random": {
+            "block": 0.0122423209913957,
+            "unit_id_": 0.0556141750723162
+          }
+        },
+        "ph_check": [
+          {
+            "term": "treatment",
+            "chisq": 13.2183043024801,
+            "df": 1,
+            "p": 0.000277228317969018,
+            "on": "fixed part (coxph without random terms)"
+          },
+          {
+            "term": "treatment2",
+            "chisq": 0.254792770105092,
+            "df": 1,
+            "p": 0.613720377048424,
+            "on": "fixed part (coxph without random terms)"
+          },
+          {
+            "term": "treatment:treatment2",
+            "chisq": 9.07569158448991,
+            "df": 1,
+            "p": 0.00259029596055973,
+            "on": "fixed part (coxph without random terms)"
+          },
+          {
+            "term": "GLOBAL",
+            "chisq": 14.8013284816268,
+            "df": 3,
+            "p": 0.00199454412979101,
+            "on": "fixed part (coxph without random terms)"
+          }
+        ],
+        "rmst": null,
+        "aft": null,
+        "life_table": true,
+        "posthoc": {
+          "status": "run",
+          "adjust": "holm",
+          "n_comparisons": 6,
+          "n_significant": 3,
+          "families": [
+            "treatment x treatment2"
+          ],
+          "type": "pairwise"
+        },
+        "reference": "Kaplan & Meier 1958 JASA 53:457; Mantel 1966 Cancer Chemother Rep 50:163; Cox 1972 JRSS B 34:187; Grambsch & Therneau 1994 Biometrika 81:515; Royston & Parmar 2013 BMC Med Res Methodol 13:152; Therneau survival (CRAN)",
+        "tutorial": "docs/engines/survival.md",
+        "note": "competing events censored here (cause-specific: Kaplan-Meier is survival net of the competing risk); cumulative incidence in the competing-risks block; median not reached in genotype_2 / primed: report a landmark survival or the RMST; 480 subsamples in 48 units: the robust score test is primary; the plain log-rank, KM and RMST intervals treat subsamples as independent; proportional hazards rejected on the fixed part (cox.zph global p = 0.00199)",
+        "also": [
+          {
+            "status": "run",
+            "test": "competing_risks",
+            "package": "cmprsk",
+            "version": "2.2.11",
+            "groups": [
+              "genotype_1 / not primed",
+              "genotype_2 / not primed",
+              "genotype_1 / primed",
+              "genotype_2 / primed"
+            ],
+            "causes": [
+              "germination",
+              "seed rot before germination"
+            ],
+            "event_of_interest": "germination",
+            "fine_gray": {
+              "event": "germination",
+              "converged": true
+            },
+            "table": [
+              {
+                "term": "treatment",
+                "contrast": "germination",
+                "statistic_name": "Gray's test chi-squared (germination)",
+                "statistic": 12.013672076982,
+                "df1": 3,
+                "df2": "NA",
+                "p": 0.0073364721870095,
+                "estimate": "NA",
+                "ci_low": "NA",
+                "ci_high": "NA",
+                "effect_name": null,
+                "effect": "NA",
+                "n": 480
+              },
+              {
+                "term": "treatment",
+                "contrast": "seed rot before germination",
+                "statistic_name": "Gray's test chi-squared (seed rot before germination)",
+                "statistic": 2.97213572675535,
+                "df1": 3,
+                "df2": "NA",
+                "p": 0.395941281167498,
+                "estimate": "NA",
+                "ci_low": "NA",
+                "ci_high": "NA",
+                "effect_name": null,
+                "effect": "NA",
+                "n": 480
+              },
+              {
+                "term": "treatment",
+                "contrast": "genotype_2 / not primed",
+                "statistic_name": "subdistribution hazard ratio (Fine-Gray, germination)",
+                "statistic": -0.623406854625795,
+                "df1": "NA",
+                "df2": "NA",
+                "p": 0.53,
+                "estimate": 0.904755131593089,
+                "ci_low": 0.660490516477032,
+                "ci_high": 1.23935443087091,
+                "effect_name": "subdistribution hazard ratio",
+                "effect": 0.904755131593089,
+                "n": 480
+              },
+              {
+                "term": "treatment",
+                "contrast": "genotype_1 / primed",
+                "statistic_name": "subdistribution hazard ratio (Fine-Gray, germination)",
+                "statistic": -0.717891092947541,
+                "df1": "NA",
+                "df2": "NA",
+                "p": 0.47,
+                "estimate": 0.897898271201434,
+                "ci_low": 0.669158982055047,
+                "ci_high": 1.20482774205697,
+                "effect_name": "subdistribution hazard ratio",
+                "effect": 0.897898271201434,
+                "n": 480
+              },
+              {
+                "term": "treatment",
+                "contrast": "genotype_2 / primed",
+                "statistic_name": "subdistribution hazard ratio (Fine-Gray, germination)",
+                "statistic": -3.13440810797384,
+                "df1": "NA",
+                "df2": "NA",
+                "p": 0.0017,
+                "estimate": 0.563722993640981,
+                "ci_low": 0.393917872785225,
+                "ci_high": 0.806725552493057,
+                "effect_name": "subdistribution hazard ratio",
+                "effect": 0.563722993640981,
+                "n": 480
+              }
+            ],
+            "cif_vs_naive": [
+              {
+                "group": "genotype_1 / not primed",
+                "time": 7,
+                "cif": 0.233333333333333,
+                "one_minus_km": 0.240212433614495
+              },
+              {
+                "group": "genotype_1 / not primed",
+                "time": 14,
+                "cif": 0.516666666666667,
+                "one_minus_km": 0.581685141007072
+              },
+              {
+                "group": "genotype_2 / not primed",
+                "time": 7,
+                "cif": 0.3,
+                "one_minus_km": 0.310394265232975
+              },
+              {
+                "group": "genotype_2 / not primed",
+                "time": 14,
+                "cif": 0.483333333333333,
+                "one_minus_km": 0.530296243887558
+              },
+              {
+                "group": "genotype_1 / primed",
+                "time": 7,
+                "cif": 0.216666666666667,
+                "one_minus_km": 0.218260869565217
+              },
+              {
+                "group": "genotype_1 / primed",
+                "time": 14,
+                "cif": 0.433333333333333,
+                "one_minus_km": 0.463318090452897
+              },
+              {
+                "group": "genotype_2 / primed",
+                "time": 7,
+                "cif": 0.241666666666667,
+                "one_minus_km": 0.249965122767857
+              },
+              {
+                "group": "genotype_2 / primed",
+                "time": 14,
+                "cif": 0.35,
+                "one_minus_km": 0.381335303420038
+              },
+              {
+                "group": "all",
+                "time": 7,
+                "cif": 0.247916666666667,
+                "one_minus_km": 0.254451166810717
+              },
+              {
+                "group": "all",
+                "time": 14,
+                "cif": 0.445833333333333,
+                "one_minus_km": 0.488537137898364
+              }
+            ],
+            "reference": "Gray 1988 Ann Stat 16:1141; Fine & Gray 1999 JASA 94:496; Putter et al. 2007 Stat Med 26:2389; Gray cmprsk (CRAN)",
+            "tutorial": "docs/engines/survival.md",
+            "note": "1 - Kaplan-Meier overstates the risk of germination (all at 14: 0.489 vs CIF 0.446)"
+          }
+        ]
+      },
+      "regression": null,
+      "anova": null,
+      "warnings": ["competing events (codes 2): the Cox model is cause-specific for event code 1", "survival subsamples are not averaged: 48 units kept as clusters of their subsamples (shared frailty)"],
+      "goal_recovery": {
+        "goal": "survival",
+        "bioana_goal": "survival",
+        "status": "planted",
+        "model_terms": [
+          "treatment",
+          "treatment2"
+        ],
+        "tested_terms": [
+          "treatment",
+          "treatment2",
+          "treatment:treatment2"
+        ],
+        "terms_match": true,
+        "test": "weighted log-rank fh_0_1 (prespecified), joint over 4 groups",
+        "scored": true,
+        "p": 3.59843803393699e-05,
+        "detected": true,
+        "proportional_hazards": false,
+        "cox_hr_average": {
+          "treatment": 0.909479563997279,
+          "treatment2": 0.829812462267119
+        },
+        "weighted_logrank_by_factor": [
+          {
+            "term": "treatment",
+            "chisq": 13.6715736291027,
+            "df": 1,
+            "p": 0.000217725406992832,
+            "stratified_on": "treatment2"
+          },
+          {
+            "term": "treatment2",
+            "chisq": 5.9133750839022,
+            "df": 1,
+            "p": 0.0150263559512117,
+            "stratified_on": "treatment"
+          }
+        ],
+        "estimate": 0.630060448180942,
+        "true_effect": 0.6,
+        "covered": true,
+        "bias": 0.0488861090601325,
+        "sign_agreement": true,
+        "piecewise": {
+          "change_time": 5.98811485094289,
+          "affected_phase": "after",
+          "robust_by": "unit_id_",
+          "terms": [
+            {
+              "term": "treatment",
+              "level": "genotype_2",
+              "true_hr": 0.6,
+              "estimate": 0.630060448180942,
+              "ci_low": 0.454468282474615,
+              "ci_high": 0.873495871263894,
+              "covered": true,
+              "hr_other_phase": 1.24823783947721,
+              "cox_hr_average": 0.909479563997279
+            },
+            {
+              "term": "treatment2",
+              "level": "primed",
+              "true_hr": 0.6,
+              "estimate": 0.667080395086007,
+              "ci_low": 0.488377758195024,
+              "ci_high": 0.911172235100853,
+              "covered": true,
+              "hr_other_phase": 0.844030960721505,
+              "cox_hr_average": 0.829812462267119
+            }
+          ],
+          "hr_before": 1.24823783947721,
+          "hr_after": 0.630060448180942
+        },
+        "scale": "hazard ratio after t = 5.98811 (piecewise Cox split at change_time; log scale); estimate / true_effect = treatment, all 2 terms in piecewise$terms",
+        "note": "hazards not proportional (delayed_effect): one Cox HR (treatment 0.909, treatment2 0.830) averages the phases",
+        "groups": {
+          "covered": 24,
+          "measures": 24,
+          "by_measure": {
+            "cumulative incidence": {
+              "covered": 8,
+              "n": 8
+            },
+            "event-free RMST": {
+              "covered": 4,
+              "n": 4
+            },
+            "event-free survival": {
+              "covered": 8,
+              "n": 8
+            },
+            "median": {
+              "covered": 4,
+              "n": 4
+            }
+          },
+          "note": "per treatment cell vs Simitall outcome_model.groups; intervals treat subsamples as independent"
+        }
+      },
+      "recovery": {
+        "scale": "survival fit vs Gaussian (latent) truth: compared by sign and detection; hazard sign reversed",
+        "n_terms": 3,
+        "n_nonzero": 2,
+        "sign_agreement": 1,
+        "detected": 0,
+        "false_positives": 0,
+        "rank_cor": -1
+      }
+    }
+  },
+  "not_analysed": []
+}
