@@ -151,17 +151,8 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
     if (!is.null(g$scale_note)) cat(sprintf("      trend: %s\n", g$scale_note))
     if (!is.null(a$recovery_note)) cat(sprintf("      truth: %s\n", a$recovery_note))
     st <- a$stat_test
-    if (!is.null(st)) {
-      if (identical(st$status, "run")) {
-        cat(sprintf("      ANOVA [%s %s] %s%s: %s\n", st$package, st$version, c(within = "repeated measures", mixed = "mixed (split-plot)", between = "factorial")[[st$layout]],
-                    if (!identical(st$correction, "none")) sprintf(", %s-corrected", st$correction) else "",
-                    paste(vapply(st$table, function(r) sprintf("%s F(%.3g, %.3g) = %.3g, p = %.3g, ges %.2f", r$term, r$num_df, r$den_df, r$F, r$p, r$ges), ""), collapse = "; ")))
-        if (identical(st$posthoc$status, "run")) cat(sprintf("      post-hoc [emmeans %s] %s: %d comparisons (%s), %d with adjusted p < 0.05\n",
-          st$posthoc$version, paste(unlist(st$posthoc$families), collapse = ", "), st$posthoc$n_comparisons, st$posthoc$adjust, st$posthoc$n_significant))
-        w <- c(st$checks$warnings, st$note)
-        if (length(w)) cat(sprintf("      ANOVA checks: %s\n", paste(w, collapse = "; ")))
-      } else cat(sprintf("      ANOVA not run: %s\n", st$note))
-    }
+    if (!is.null(st)) for (x in c(list(st), st$also)) .ba_print_stat_test(x)
+
     gr <- a$goal_recovery
     if (!is.null(gr)) cat(sprintf("      goal truth (%s, terms %s%s): %s\n", gr$goal, paste(unlist(gr$model_terms), collapse = ", "),
       if (isFALSE(gr$terms_match)) ", NOT the terms Bioana tested" else "",
@@ -193,4 +184,25 @@ bioana_analyze <- function(dir, outdir = file.path(dir, "bioana"), alpha = 0.05,
   if (length(offer)) cat(sprintf("  secondary engines not run (%s): bioana_analyze(dir, secondary = TRUE)\n",
                                  paste(sprintf("%s -> %s", names(offer), unlist(offer)), collapse = ", ")))
   for (id in names(s$not_analysed)) cat(sprintf("  [%s] not analysed (%s): %s\n", id, s$not_analysed[[id]]$status, s$not_analysed[[id]]$note))
+}
+
+.ba_print_stat_test <- function(st) {
+  if (!identical(st$status, "run")) { cat(sprintf("      test not run%s: %s\n", if (!is.null(st$test)) paste0(" (", st$test, ")") else "", st$note %||% "")); return(invisible()) }
+  if (startsWith(st$test, "anova_")) {
+    cat(sprintf("      ANOVA [%s %s] %s%s: %s\n", st$package, st$version, c(within = "repeated measures", mixed = "mixed (split-plot)", between = "factorial")[[st$layout]],
+                if (!identical(st$correction, "none")) sprintf(", %s-corrected", st$correction) else "",
+                paste(vapply(st$table, function(r) sprintf("%s F(%.3g, %.3g) = %.3g, p = %.3g, ges %.2f", r$term, r$num_df, r$den_df, r$F, r$p, r$ges), ""), collapse = "; ")))
+  } else {
+    r <- st$table[[1]]
+    df <- if (!is.na(r$df1) && !is.na(r$df2)) sprintf("(%.3g, %.3g)", r$df1, r$df2) else if (!is.na(r$df1)) sprintf("(%.3g)", r$df1) else ""
+    cat(sprintf("      %s [%s %s] %s: %s%s = %.3g, p = %.3g%s%s\n", st$test, st$package, st$version, st$factor, r$statistic_name, df, r$statistic, r$p,
+                if (!is.na(r$estimate)) sprintf(", %s %.3g [%.3g, %.3g]", if (is.na(r$contrast)) "estimate" else r$contrast, r$estimate, r$ci_low, r$ci_high) else "",
+                if (!is.na(r$effect)) sprintf(", %s %.2f%s", r$effect_name, r$effect, if (!is.null(st$magnitude)) paste0(" (", st$magnitude, ")") else "") else ""))
+  }
+  ph <- st$posthoc
+  if (identical(ph$status, "run")) cat(sprintf("      post-hoc%s %s: %d comparisons (%s), %d with adjusted p < 0.05\n",
+    if (!is.null(ph$version)) sprintf(" [emmeans %s]", ph$version) else "", paste(unlist(ph$families), collapse = ", "), ph$n_comparisons, ph$adjust, ph$n_significant))
+  w <- c(st$checks$warnings, st$note)
+  if (length(w)) cat(sprintf("      checks: %s\n", paste(w, collapse = "; ")))
+  invisible()
 }

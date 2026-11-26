@@ -1,52 +1,106 @@
-# Classical ANOVA on the outcome, next to the model fit (rule table inst/rules/stat_tests.tsv,
-# rules inst/rules/posthoc.json):
-#   repeated-measures / mixed ANOVA with sphericity corrections, or factorial ANOVA (afex::aov_car),
-#   post-hoc comparisons (emmeans), generalized and partial eta squared (afex), assumption checks.
-# The design picks the test. Checks are reported; they do not switch the test.
+# Classical tests on the outcome, next to the model fit (rule table inst/rules/stat_tests.tsv,
+# rules inst/rules/stat_rules.json): t-tests, Wilcoxon, sign test, Kruskal-Wallis, Friedman, Welch ANOVA,
+# proportion and Fisher tests (stats, rstatix), repeated-measures / mixed / factorial ANOVA (afex),
+# post-hoc comparisons (emmeans, rstatix, stats), effect sizes, assumption checks, descriptives.
+# The design and the outcome type pick the test (first auto row that matches); more run when asked.
+# Checks are reported; they do not switch the test.
 
 # Which ANOVA the design allows: "within", "mixed", "between", or "none" with the reason.
 .ba_anova_layout <- function(frame, p) {
-  subj <- character(); other <- character()
+  subj <- character(); rblock <- character(); other <- character()
   for (r in p$random) {
-    if (isTRUE(r$intercept_only) && length(r$vars) == 1L && identical(p$role[[r$vars]], "unit")) subj <- c(subj, r$vars)
+    one <- isTRUE(r$intercept_only) && length(r$vars) == 1L
+    if (one && identical(p$role[[r$vars]], "unit")) subj <- c(subj, r$vars)
+    else if (one && identical(p$role[[r$vars]], "block")) rblock <- c(rblock, r$vars)   # random block intercept: a block
     else other <- c(other, r$label)
   }
-  fixed <- intersect(unique(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l))))), names(frame))
+  fixed <- intersect(unique(c(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l)))), rblock)), names(frame))
   num <- fixed[vapply(fixed, function(v) is.numeric(frame[[v]]), logical(1))]
   if (length(num)) return(list(layout = "none", reason = sprintf("numeric term %s (trend): the slope is the test", paste(num, collapse = ", "))))
-  if (length(other)) return(list(layout = "none", reason = sprintf("random terms other than one subject (%s): see the mixed model's ANOVA table", paste(other, collapse = ", "))))
+  if (length(other)) return(list(layout = "none", reason = sprintf("random terms other than one subject or block (%s): see the mixed model's ANOVA table", paste(other, collapse = ", "))))
   if (length(subj) > 1L) return(list(layout = "none", reason = "more than one subject term"))
   if (!length(fixed)) return(list(layout = "none", reason = "no fixed factors"))
-  if (!length(subj)) {
+  role <- function(v) p$role[[v]] %||% "treatment"
+  out <- if (!length(subj)) {
     n_cell <- table(interaction(frame[fixed], drop = FALSE))
     if (any(n_cell == 0)) return(list(layout = "none", reason = sprintf("%d empty cells of %s: factors are not fully crossed", sum(n_cell == 0), paste(fixed, collapse = " x "))))
-    return(list(layout = "between", subject = NULL, within = character(), between = fixed))
+    list(layout = "between", subject = NULL, within = character(), between = fixed)
+  } else {
+    s <- as.character(frame[[subj]])
+    varies <- vapply(fixed, function(v) any(tapply(as.character(frame[[v]]), s, function(z) length(unique(z)) > 1L)), logical(1))
+    within <- fixed[varies]; between <- fixed[!varies]
+    if (!length(within)) return(list(layout = "none", reason = sprintf("no factor varies within %s", subj)))
+    tab <- table(s, interaction(frame[within], drop = FALSE))
+    miss <- rowSums(tab == 0) > 0
+    if (any(miss)) return(list(layout = "none", reason = sprintf("%d of %d %s levels miss some %s cells: repeated-measures ANOVA would drop them; the mixed model keeps them",
+                                                              sum(miss), length(miss), subj, paste(within, collapse = " x "))))
+    list(layout = if (length(between)) "mixed" else "within", subject = subj, within = within, between = between, replicated = any(tab > 1))
   }
-  s <- as.character(frame[[subj]])
-  varies <- vapply(fixed, function(v) any(tapply(as.character(frame[[v]]), s, function(z) length(unique(z)) > 1L)), logical(1))
-  within <- fixed[varies]; between <- fixed[!varies]
-  if (!length(within)) return(list(layout = "none", reason = sprintf("no factor varies within %s", subj)))
-  tab <- table(s, interaction(frame[within], drop = FALSE))
-  miss <- rowSums(tab == 0) > 0
-  if (any(miss)) return(list(layout = "none", reason = sprintf("%d of %d %s levels miss some %s cells: repeated-measures ANOVA would drop them; the mixed model keeps them",
-                                                            sum(miss), length(miss), subj, paste(within, collapse = " x "))))
-  list(layout = if (length(between)) "mixed" else "within", subject = subj, within = within, between = between,
-       replicated = any(tab > 1))
+  facs <- c(out$between, out$within)
+  out$treat <- facs[vapply(facs, function(v) role(v) == "treatment", logical(1))]
+  out$blocks <- out$between[vapply(out$between, function(v) role(v) == "block", logical(1))]
+  out$random_blocks <- rblock
+  out$blocking <- if (!is.null(out$subject)) "subject" else if (!length(out$blocks)) "none" else if (length(out$blocks) == 1L && length(out$treat) == 1L &&
+    all(table(frame[[out$treat]], frame[[out$blocks]]) == 1L)) "block" else "blocks"
+  out
 }
 
-.ba_stat_tests <- function(frame, p, design, goal, alpha = 0.05) {
-  lay <- .ba_anova_layout(frame, p)
-  if (identical(lay$layout, "none")) return(list(summary = list(status = "not run", note = lay$reason)))
-  rules <- .ba_tsv("stat_tests"); row <- rules[rules$layout == lay$layout, , drop = FALSE]
-  for (pk in strsplit(row$requires, ",", fixed = TRUE)[[1]]) {
-    if (!requireNamespace(pk, quietly = TRUE)) return(list(summary = list(status = "not run", note = sprintf("%s not installed", pk))))
+# Does a stat_tests.tsv row fit this outcome and design?
+.ba_stat_matches <- function(row, lay, type, frame) {
+  sp <- function(x) trimws(strsplit(x, ",", fixed = TRUE)[[1]])
+  if (!paste0("outcome:", type) %in% sp(row$applies_to) || !lay$layout %in% sp(row$layout)) return(FALSE)
+  nf <- length(lay$treat)
+  if (!(row$factors == "any" || (row$factors == "1" && nf == 1L) || (row$factors == "2+" && nf >= 2L))) return(FALSE)
+  if (row$levels != "any") {
+    if (nf != 1L) return(FALSE)
+    nl <- length(unique(stats::na.omit(frame[[lay$treat]])))
+    if (!((row$levels == "2" && nl == 2L) || (row$levels == "3+" && nl >= 3L))) return(FALSE)
   }
-  ph <- .ba_rules("posthoc")
+  row$blocking == "any" || lay$blocking %in% sp(row$blocking)
+}
+
+.ba_stat_tests <- function(frame, p, design, goal, alpha = 0.05, type = "continuous", args = list()) {
+  lay <- .ba_anova_layout(frame, p)
+  sr <- .ba_rules("stat_rules")
+  desc <- .ba_descriptives(frame, p, type, sr)
+  if (identical(lay$layout, "none")) return(list(summary = list(status = "not run", note = lay$reason), descriptives = desc))
+  rules <- .ba_tsv("stat_tests")
+  fits <- rules[vapply(seq_len(nrow(rules)), function(i) .ba_stat_matches(rules[i, ], lay, type, frame), logical(1)), , drop = FALSE]
+  fam <- sr$default_family[[type]] %||% "parametric"
+  ids <- utils::head(fits$test[fits$auto == "yes" & fits$family == fam], 1)
+  notes <- character()
+  for (r in unique(unlist(c(design$spec$analysis$stat_tests, args$stat_tests)))) {
+    if (r %in% c("parametric", "nonparametric")) {
+      m <- fits$test[fits$auto == "yes" & fits$family == r]
+      if (length(m)) ids <- c(ids, m[1]) else notes <- c(notes, sprintf("no %s test fits this design", r))
+    } else if (r %in% fits$test) ids <- c(ids, r)
+    else notes <- c(notes, sprintf("requested test '%s' %s", r, if (r %in% rules$test) "does not fit this outcome and design" else "is not in stat_tests.tsv"))
+  }
+  ids <- unique(ids)
+  if (!length(ids)) return(list(summary = list(status = "not run", note = paste(c("no test in stat_tests.tsv fits this outcome and design", notes), collapse = "; ")), descriptives = desc))
+  res <- lapply(ids, function(id) {
+    row <- rules[rules$test == id, , drop = FALSE]
+    miss <- Filter(function(pk) !requireNamespace(pk, quietly = TRUE), strsplit(row$requires, ",", fixed = TRUE)[[1]])
+    if (length(miss)) return(list(summary = list(status = "not run", test = id, note = sprintf("%s not installed", paste(miss, collapse = ", ")))))
+    tryCatch(if (startsWith(id, "anova_")) .ba_st_anova(row, frame, lay, p, design, goal, sr) else .ba_st_simple(row, frame, lay, p, design, sr, rules),
+             error = function(e) list(summary = list(status = "error", test = id, note = conditionMessage(e))))
+  })
+  main <- res[[1]]$summary
+  if (length(notes)) main$note <- paste(c(main$note, notes), collapse = "; ")
+  if (length(res) > 1L) main$also <- lapply(res[-1], `[[`, "summary")
+  bind <- function(k) { x <- Filter(Negate(is.null), lapply(res, function(r) if (!is.null(r[[k]])) cbind(test = r$summary$test, r[[k]]))); if (length(x)) do.call(rbind, x) }
+  at <- Filter(Negate(is.null), lapply(res, `[[`, "anova_table"))
+  list(summary = main, anova_table = if (length(at)) at[[1]],
+       posthoc = bind("posthoc"), stat_table = bind("flat"), descriptives = desc)
+}
+
+.ba_st_anova <- function(row, frame, lay, p, design, goal, ph) {
   d <- frame
   if (is.null(lay$subject)) { d$id_ <- factor(seq_len(nrow(d))); idv <- "id_" } else idv <- lay$subject
   # between part as the design's model writes it (treatment + block stays additive); afex crosses the
   # within-subject factors with everything
   bl <- p$fixed_labels[vapply(p$fixed_labels, function(l) all(all.vars(str2lang(l)) %in% lay$between), logical(1))]
+  bl <- c(bl, lay$random_blocks)
   bt <- if (length(bl)) paste(bl, collapse = " + ") else "1"
   err <- if (length(lay$within)) sprintf("Error(%s/(%s))", idv, paste(lay$within, collapse = " * ")) else sprintf("Error(%s)", idv)
   f <- stats::as.formula(sprintf("y_ ~ %s + %s", bt, err))
@@ -60,6 +114,7 @@
   anova_terms <- vapply(rownames(tab), function(t) paste(sort(strsplit(t, ":", fixed = TRUE)[[1]]), collapse = ":"), "")
   extra <- rownames(tab)[grepl(":", rownames(tab), fixed = TRUE) & !anova_terms %in% model_terms]
   notes <- c(if (length(extra)) sprintf("ANOVA crosses all factors; analysis.model has no %s", paste(extra, collapse = ", ")),
+             if (length(lay$random_blocks)) sprintf("random block intercept %s entered as an additive block (same F for balanced data)", paste(lay$random_blocks, collapse = ", ")),
              if (isTRUE(lay$replicated)) sprintf("several observations per %s cell: averaged by afex", idv))
   ph_res <- .ba_posthoc(fit, lay, p, goal, design$spec$analysis$posthoc, ph)
   chk <- .ba_anova_checks(fit, d, lay, ph$outlier_iqr %||% 3, p)
@@ -71,10 +126,13 @@
                       posthoc = ph_res$summary, reference = row$reference, tutorial = row$doc, alternative = row$alternative,
                       note = if (length(notes)) paste(notes, collapse = "; ")),
        anova_table = data.frame(term = rownames(tab), tab, row.names = NULL, check.names = FALSE),
-       posthoc = ph_res$table)
+       posthoc = ph_res$table,
+       flat = data.frame(term = rownames(tab), contrast = NA_character_, statistic_name = "F", statistic = tab$F, df1 = tab$num_df, df2 = tab$den_df,
+                         p = tab$p, estimate = NA_real_, ci_low = NA_real_, ci_high = NA_real_, effect_name = "ges", effect = tab$ges, n = nrow(frame),
+                         stringsAsFactors = FALSE))
 }
 
-# ANOVA table with the sphericity correction from posthoc.json: GG, HF, girden (HF when GG eps > threshold), none.
+# ANOVA table with the sphericity correction from stat_rules.json: GG, HF, girden (HF when GG eps > threshold), none.
 .ba_anova_corrected <- function(fit, corr, thr) {
   raw <- function(cc) {
     a <- withCallingHandlers(stats::anova(fit, correction = cc, es = c("ges", "pes")),
@@ -105,7 +163,7 @@
                                        gg_epsilon = unname(a[t, "GG eps"]), hf_epsilon = unname(a[t, "HF eps"])))
 }
 
-# Post-hoc comparisons: which families from the goal (posthoc.json families), adjustment from posthoc.json or
+# Post-hoc comparisons: which families from the goal (stat_rules.json families), adjustment from stat_rules.json or
 # analysis.posthoc. emmeans on the afex fit; multivariate model for within-subject contrasts.
 .ba_posthoc <- function(fit, lay, p, goal, req, ph) {
   type <- req$type %||% ph$posthoc_type %||% "pairwise"
@@ -175,4 +233,171 @@
        warnings = c(if (sum(ext)) sprintf("%d extreme outlier(s) (beyond %g IQR within a cell)", sum(ext), iqr_k),
                     if (!is.null(sw) && sw$p.value < 0.05) sprintf("residuals depart from normality (Shapiro-Wilk p = %.3g)", sw$p.value),
                     if (!is.null(lev) && is.finite(lev) && lev < 0.05) sprintf("unequal variances between groups (Levene p = %.3g)", lev)))
+}
+
+# ---- tests on one treatment factor (two groups, several groups, paired, blocked) and binary outcomes ----
+
+.ba_st_simple <- function(row, frame, lay, p, design, sr, rules) {
+  id <- row$test; tv <- lay$treat[1]
+  d <- frame; d$g_ <- droplevels(factor(d[[tv]])); lev <- levels(d$g_)
+  d$yn_ <- if (is.factor(d$y_)) as.integer(d$y_) else as.numeric(d$y_)
+  d <- d[!is.na(d$yn_) & !is.na(d$g_), , drop = FALSE]
+  req <- design$spec$analysis$posthoc
+  adj <- req$adjust %||% sr$adjust_nonparametric %||% sr$adjust %||% "holm"
+  notes <- character(); ph <- NULL; chk <- NULL
+  quiet <- function(expr) withCallingHandlers(expr, warning = function(w) {
+    if (grepl("exact p-value|ties|zeroes|Chi-squared approximation", conditionMessage(w))) { notes <<- unique(c(notes, "ties or zeros: normal approximation")); invokeRestart("muffleWarning") } })
+  blk <- lay$subject %||% lay$blocks[1]
+  wide <- function() {                       # one value per subject (or block) and level, matched
+    w <- tapply(d$yn_, list(as.character(d[[blk]]), d$g_), mean); w[stats::complete.cases(w), , drop = FALSE]
+  }
+  long_of <- function(w) data.frame(id_ = factor(rep(rownames(w), ncol(w))), g_ = factor(rep(colnames(w), each = nrow(w)), colnames(w)), yn_ = c(w))
+  fr <- function(term = tv, contrast = NA_character_, stat_name, stat, df1 = NA_real_, df2 = NA_real_, pv, est = NA_real_, lo = NA_real_, hi = NA_real_,
+                 eff_name = NA_character_, eff = NA_real_, n = nrow(d))
+    data.frame(term = term, contrast = contrast, statistic_name = stat_name, statistic = unname(stat), df1 = unname(df1), df2 = unname(df2), p = unname(pv),
+               estimate = unname(est), ci_low = unname(lo), ci_high = unname(hi), effect_name = eff_name, effect = unname(eff), n = n, stringsAsFactors = FALSE)
+  ctr <- sprintf("%s - %s", lev[1], lev[2])
+  extra <- list()
+  if (id %in% c("t_test_welch", "t_test_student")) {
+    ve <- id == "t_test_student"
+    tt <- stats::t.test(yn_ ~ g_, data = d, var.equal = ve)
+    cd <- rstatix::cohens_d(d, yn_ ~ g_, var.equal = ve); hg <- rstatix::cohens_d(d, yn_ ~ g_, var.equal = ve, hedges.correction = TRUE)
+    flat <- fr(contrast = ctr, stat_name = "t", stat = tt$statistic, df1 = tt$parameter, pv = tt$p.value, est = tt$estimate[1] - tt$estimate[2],
+               lo = tt$conf.int[1], hi = tt$conf.int[2], eff_name = "Cohen's d", eff = cd$effsize)
+    extra <- list(hedges_g = hg$effsize, magnitude = as.character(cd$magnitude))
+    chk <- .ba_group_checks(d, sr)
+  } else if (id == "t_test_paired") {
+    w <- wide(); tt <- stats::t.test(w[, 1], w[, 2], paired = TRUE)
+    lw <- long_of(w); cd <- rstatix::cohens_d(lw, yn_ ~ g_, paired = TRUE); hg <- rstatix::cohens_d(lw, yn_ ~ g_, paired = TRUE, hedges.correction = TRUE)
+    flat <- fr(contrast = ctr, stat_name = "t", stat = tt$statistic, df1 = tt$parameter, pv = tt$p.value, est = tt$estimate, lo = tt$conf.int[1], hi = tt$conf.int[2],
+               eff_name = "Cohen's d (differences)", eff = cd$effsize, n = nrow(w))
+    extra <- list(hedges_g = hg$effsize, magnitude = as.character(cd$magnitude))
+    chk <- .ba_diff_checks(w[, 1] - w[, 2], sr, "differences")
+  } else if (id == "wilcoxon_rank_sum") {
+    wt <- quiet(stats::wilcox.test(yn_ ~ g_, data = d)); es <- quiet(rstatix::wilcox_effsize(d, yn_ ~ g_))
+    flat <- fr(contrast = ctr, stat_name = "W", stat = wt$statistic, pv = wt$p.value, eff_name = "r", eff = es$effsize)
+    extra <- list(magnitude = as.character(es$magnitude)); chk <- .ba_group_checks(d, sr, normality = FALSE)
+  } else if (id == "wilcoxon_signed_rank") {
+    w <- wide(); wt <- quiet(stats::wilcox.test(w[, 1], w[, 2], paired = TRUE)); es <- quiet(rstatix::wilcox_effsize(long_of(w), yn_ ~ g_, paired = TRUE))
+    flat <- fr(contrast = ctr, stat_name = "V", stat = wt$statistic, pv = wt$p.value, eff_name = "r", eff = es$effsize, n = nrow(w))
+    extra <- list(magnitude = as.character(es$magnitude)); chk <- .ba_diff_checks(w[, 1] - w[, 2], sr, "differences", normality = FALSE)
+  } else if (id == "sign_test") {
+    w <- wide(); dif <- w[, 1] - w[, 2]; nz <- dif[dif != 0]
+    bt <- stats::binom.test(sum(nz > 0), length(nz), 0.5)
+    flat <- fr(contrast = ctr, stat_name = "positive differences", stat = sum(nz > 0), pv = bt$p.value, est = stats::median(dif), n = length(nz))
+    if (sum(dif == 0)) notes <- c(notes, sprintf("%d tied pairs dropped", sum(dif == 0)))
+  } else if (id == "kruskal_wallis") {
+    kt <- stats::kruskal.test(yn_ ~ g_, data = d); es <- rstatix::kruskal_effsize(d, yn_ ~ g_)
+    flat <- fr(stat_name = "H", stat = kt$statistic, df1 = kt$parameter, pv = kt$p.value, eff_name = "eta2[H]", eff = es$effsize)
+    extra <- list(magnitude = as.character(es$magnitude)); chk <- .ba_group_checks(d, sr, normality = FALSE)
+    dn <- rstatix::dunn_test(d, yn_ ~ g_, p.adjust.method = adj)
+    ph <- data.frame(family = tv, by = NA_character_, contrast = sprintf("%s - %s", dn$group1, dn$group2), estimate = if (!is.null(dn[["estimate"]])) dn[["estimate"]] else NA_real_, se = NA_real_, df = NA_real_,
+                     statistic = dn$statistic, p = dn$p, p_adj = dn$p.adj, adjust = adj, stringsAsFactors = FALSE)
+  } else if (id == "friedman") {
+    w <- wide(); ft <- stats::friedman.test(w); lw <- long_of(w)
+    es <- rstatix::friedman_effsize(lw, yn_ ~ g_ | id_)
+    flat <- fr(stat_name = "Friedman chi-squared", stat = ft$statistic, df1 = ft$parameter, pv = ft$p.value, eff_name = "Kendall's W", eff = es$effsize, n = nrow(w))
+    extra <- list(magnitude = as.character(es$magnitude), blocked_by = blk)
+    if (ncol(w) >= 3) {
+      pa <- quiet(stats::pairwise.wilcox.test(lw$yn_, lw$g_, paired = TRUE, p.adjust.method = adj))
+      pr <- quiet(stats::pairwise.wilcox.test(lw$yn_, lw$g_, paired = TRUE, p.adjust.method = "none"))
+      ph <- .ba_pairwise_table(pa, pr, tv, adj)
+    }
+  } else if (id == "welch_anova") {
+    ow <- stats::oneway.test(yn_ ~ g_, data = d, var.equal = FALSE); gh <- rstatix::games_howell_test(d, yn_ ~ g_)
+    flat <- fr(stat_name = "F", stat = ow$statistic, df1 = ow$parameter[1], df2 = ow$parameter[2], pv = ow$p.value)
+    chk <- .ba_group_checks(d, sr)
+    ph <- data.frame(family = tv, by = NA_character_, contrast = sprintf("%s - %s", gh$group2, gh$group1), estimate = gh$estimate, se = NA_real_, df = NA_real_,
+                     statistic = NA_real_, p = NA_real_, p_adj = gh$p.adj, adjust = "games-howell", stringsAsFactors = FALSE)
+  } else if (id == "prop_test") {
+    x <- tapply(d$yn_, d$g_, sum); n <- tapply(d$yn_, d$g_, length)
+    e <- outer(n, c(sum(x), sum(n - x)) / sum(n))
+    if (min(e) < (sr$min_expected %||% 5)) {
+      r2 <- .ba_st_simple(rules[rules$test == "fisher_exact", , drop = FALSE], frame, lay, p, design, sr, rules)
+      r2$summary$note <- paste(c(sprintf("smallest expected count %.2g < %g: Fisher's exact test instead of the proportion test", min(e), sr$min_expected %||% 5), r2$summary$note), collapse = "; ")
+      return(r2)
+    }
+    pt <- stats::prop.test(x, n)
+    if (length(x) == 2L) {
+      h <- effectsize::cohens_h(t(matrix(c(x, n - x), ncol = 2)))   # effectsize: groups in columns
+      flat <- fr(contrast = ctr, stat_name = "X-squared", stat = pt$statistic, df1 = pt$parameter, pv = pt$p.value, est = pt$estimate[1] - pt$estimate[2],
+                 lo = pt$conf.int[1], hi = pt$conf.int[2], eff_name = "Cohen's h", eff = h$Cohens_h)
+    } else {
+      flat <- fr(stat_name = "X-squared", stat = pt$statistic, df1 = pt$parameter, pv = pt$p.value)
+      pa <- stats::pairwise.prop.test(x, n, p.adjust.method = adj); pr <- stats::pairwise.prop.test(x, n, p.adjust.method = "none")
+      ph <- .ba_pairwise_table(pa, pr, tv, adj)
+    }
+    extra <- list(proportions = as.list(stats::setNames(as.numeric(x / n), names(x))), yates = length(x) == 2L)
+  } else if (id == "fisher_exact") {
+    tab <- table(d$g_, factor(d$yn_, levels = c(0, 1)))
+    ft <- stats::fisher.test(tab)
+    flat <- if (nrow(tab) == 2L) fr(contrast = ctr, stat_name = "odds ratio", stat = ft$estimate, pv = ft$p.value, est = ft$estimate, lo = ft$conf.int[1], hi = ft$conf.int[2],
+                                    eff_name = "odds ratio", eff = ft$estimate) else fr(stat_name = "exact", stat = NA_real_, pv = ft$p.value)
+    if (nrow(tab) > 2L) {
+      pf <- rstatix::pairwise_fisher_test(tab, p.adjust.method = adj)
+      ph <- data.frame(family = tv, by = NA_character_, contrast = sprintf("%s - %s", pf$group1, pf$group2), estimate = NA_real_, se = NA_real_, df = NA_real_,
+                       statistic = NA_real_, p = pf$p, p_adj = pf$p.adj, adjust = adj, stringsAsFactors = FALSE)
+    }
+  } else stop(sprintf("no adapter for stat test '%s'", id))
+  pk <- strsplit(row$requires, ",", fixed = TRUE)[[1]][1]
+  list(summary = c(list(status = "run", test = id, name = row$model, layout = lay$layout, package = pk, version = as.character(utils::packageVersion(pk)),
+                        call = row$calls, factor = tv, levels = as.list(lev), table = lapply(seq_len(nrow(flat)), function(i) as.list(flat[i, ])),
+                        checks = chk, posthoc = if (!is.null(ph)) list(status = "run", adjust = adj, n_comparisons = nrow(ph), n_significant = sum(ph$p_adj < 0.05, na.rm = TRUE),
+                                                                        families = list(tv)),
+                        reference = row$reference, tutorial = row$doc, alternative = row$alternative,
+                        note = if (length(notes)) paste(notes, collapse = "; ")), extra),
+       posthoc = ph, flat = flat)
+}
+
+# stats::pairwise.* result (adjusted and raw) as a post-hoc table.
+.ba_pairwise_table <- function(pa, pr, tv, adj) {
+  m <- pa$p.value; r <- pr$p.value
+  ij <- which(!is.na(m), arr.ind = TRUE)
+  data.frame(family = tv, by = NA_character_, contrast = sprintf("%s - %s", colnames(m)[ij[, 2]], rownames(m)[ij[, 1]]), estimate = NA_real_, se = NA_real_,
+             df = NA_real_, statistic = NA_real_, p = r[ij], p_adj = m[ij], adjust = adj, stringsAsFactors = FALSE)
+}
+
+.ba_skew <- function(x) { x <- x[!is.na(x)]; m <- mean(x); s2 <- mean((x - m)^2); if (s2 > 0) mean((x - m)^3) / s2^1.5 else NA_real_ }
+
+# Reported per group, never used to switch tests: extreme outliers, Shapiro-Wilk, Levene (median centre), Fligner-Killeen.
+.ba_group_checks <- function(d, sr, normality = TRUE) {
+  k <- sr$outlier_iqr %||% 3
+  ext <- sum(unlist(tapply(d$yn_, d$g_, function(y) { q <- stats::quantile(y, c(.25, .75)); i <- diff(q); sum(y < q[1] - k * i | y > q[2] + k * i) })))
+  sw <- if (normality) tapply(d$yn_, d$g_, function(y) if (length(y) >= 3 && length(y) <= 5000 && stats::sd(y) > 0) stats::shapiro.test(y)$p.value else NA_real_)
+  lev <- if (requireNamespace("car", quietly = TRUE)) tryCatch(car::leveneTest(d$yn_, d$g_)[1, "Pr(>F)"], error = function(e) NA_real_)
+  fk <- tryCatch(stats::fligner.test(d$yn_, d$g_)$p.value, error = function(e) NA_real_)
+  list(extreme_outliers = ext, shapiro_p = if (!is.null(sw)) as.list(sw), levene_p = lev, fligner_p = fk,
+       warnings = c(if (ext) sprintf("%d extreme outlier(s) (beyond %g IQR within a group)", ext, k),
+                    if (!is.null(sw) && any(sw < 0.05, na.rm = TRUE)) sprintf("Shapiro-Wilk p < 0.05 in %s", paste(names(sw)[which(sw < 0.05)], collapse = ", ")),
+                    if (isTRUE(lev < 0.05)) sprintf("unequal variances (Levene p = %.3g)", lev)))
+}
+
+.ba_diff_checks <- function(dif, sr, what, normality = TRUE) {
+  k <- sr$outlier_iqr %||% 3; q <- stats::quantile(dif, c(.25, .75)); i <- diff(q)
+  ext <- sum(dif < q[1] - k * i | dif > q[2] + k * i)
+  sw <- if (normality && length(dif) >= 3 && stats::sd(dif) > 0) stats::shapiro.test(dif)$p.value
+  sk <- .ba_skew(dif)
+  list(extreme_outliers = ext, shapiro_p = sw, skewness = sk,
+       warnings = c(if (ext) sprintf("%d extreme outlier(s) among the %s", ext, what),
+                    if (!is.null(sw) && sw < 0.05) sprintf("%s depart from normality (Shapiro-Wilk p = %.3g)", what, sw),
+                    if (!normality && is.finite(sk) && abs(sk) > (sr$skew_note %||% 1)) sprintf("%s are skewed (%.2f): the signed-rank test assumes symmetry; the sign test does not", what, sk)))
+}
+
+# Descriptives per treatment cell (rstatix get_summary_stats "common" plus quartiles and skewness); binary: n, successes, proportion.
+.ba_descriptives <- function(frame, p, type, sr) {
+  if (!type %in% c("continuous", "ordinal", "binary")) return(NULL)
+  fx <- intersect(unique(unlist(lapply(p$fixed_labels, function(l) all.vars(str2lang(l))))), names(frame))
+  gv <- fx[vapply(fx, function(v) identical(p$role[[v]] %||% "treatment", "treatment") && !is.numeric(frame[[v]]), logical(1))]
+  y <- if (is.factor(frame$y_)) as.integer(frame$y_) else as.numeric(frame$y_)
+  cell <- if (length(gv)) interaction(frame[gv], drop = TRUE, sep = " / ") else factor(rep("all", nrow(frame)))
+  out <- lapply(levels(cell), function(cl) {
+    v <- y[cell == cl & !is.na(y)]; n <- length(v)
+    key <- if (length(gv)) as.list(stats::setNames(strsplit(cl, " / ", fixed = TRUE)[[1]], gv)) else list(group = "all")
+    if (type == "binary") return(as.data.frame(c(key, list(n = n, successes = sum(v), proportion = mean(v))), stringsAsFactors = FALSE))
+    q <- stats::quantile(v, c(.25, .5, .75)); se <- stats::sd(v) / sqrt(n); sk <- .ba_skew(v)
+    as.data.frame(c(key, list(n = n, mean = mean(v), sd = stats::sd(v), se = se, ci = stats::qt(0.975, n - 1) * se, median = unname(q[2]),
+                              q1 = unname(q[1]), q3 = unname(q[3]), iqr = unname(q[3] - q[1]), min = min(v), max = max(v), skewness = sk,
+                              report = if (is.finite(sk) && abs(sk) > (sr$skew_report_median %||% 1)) "median (IQR)" else "mean (SD)")), stringsAsFactors = FALSE)
+  })
+  do.call(rbind, out)
 }

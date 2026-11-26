@@ -1,3 +1,16 @@
+# bioana 0.9.0
+
+- Tests on one treatment factor next to the model (`stat_tests.tsv` now has condition columns: outcome type,
+  family, layout, factors, levels, blocking, auto): Welch, Student and paired t (Cohen's d, Hedges' g), Wilcoxon
+  rank-sum and signed-rank (r), sign test, Kruskal-Wallis (eta2[H], Dunn), Friedman on subjects or RCBD blocks
+  (Kendall's W, pairwise signed-rank), Welch ANOVA (Games-Howell), proportion test (difference with CI, Cohen's h;
+  Fisher when an expected count < 5) and Fisher's exact test. The outcome type picks the family
+  (`stat_rules.json` `default_family`); `analysis.stat_tests` or `params` ask for more.
+- `descriptives.tsv` for every continuous, ordinal or binary outcome; `stat_tests.tsv` with every test row.
+- Random block intercepts enter the ANOVA as an additive block.
+- `inst/rules/posthoc.json` renamed `stat_rules.json`.
+- Checked against stats, rstatix, effectsize and coin (`tests/testthat/test-two-groups.R`).
+
 # bioana 0.8.0
 
 - Classical ANOVA next to the model for continuous outcomes (`R/stat_tests.R`, rule table

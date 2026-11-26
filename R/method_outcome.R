@@ -104,9 +104,11 @@
   }
   # classical ANOVA next to the model (stat_tests.tsv): repeated-measures / mixed / factorial, post-hoc, effect sizes
   st <- NULL
-  if (type == "continuous" && !isFALSE(args$anova)) {
-    st <- tryCatch(.ba_stat_tests(frame, p, design, goal, alpha),
+  if (type %in% c("continuous", "ordinal", "binary") && !isFALSE(args$anova) && !isFALSE(args$stat_tests)) {
+    st <- tryCatch(.ba_stat_tests(frame, p, design, goal, alpha, type, args),
                    error = function(e) list(summary = list(status = "error", note = conditionMessage(e))))
+    if (!is.null(st$descriptives)) paths <- c(paths, descriptives = .ba_write_tsv(st$descriptives, file.path(outdir, "descriptives.tsv")))
+    if (!is.null(st$stat_table)) paths <- c(paths, stat_tests = .ba_write_tsv(st$stat_table, file.path(outdir, "stat_tests.tsv")))
     if (!is.null(st$anova_table)) paths <- c(paths, anova_table = .ba_write_tsv(st$anova_table, file.path(outdir, "anova_table.tsv")))
     if (!is.null(st$posthoc)) paths <- c(paths, posthoc = .ba_write_tsv(st$posthoc, file.path(outdir, "posthoc.tsv")))
   }

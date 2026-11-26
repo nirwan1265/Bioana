@@ -1,6 +1,6 @@
 # Classical ANOVA next to the model (afex + emmeans)
 
-Rule table: `inst/rules/stat_tests.tsv`. Rules: `inst/rules/posthoc.json`. Code: `R/stat_tests.R`.
+Rule table: `inst/rules/stat_tests.tsv`. Rules: `inst/rules/stat_rules.json`. Code: `R/stat_tests.R`.
 Output per outcome data set: `bioana/<id>/anova_table.tsv`, `bioana/<id>/posthoc.tsv`,
 `summary$analyses$<id>$stat_test`.
 
@@ -22,9 +22,9 @@ so Bioana does not run the ANOVA then.
 - F per term with numerator and denominator df, p, generalized eta squared (`ges`, Bakeman 2005)
   and partial eta squared (`pes`).
 - Sphericity: Mauchly's test and the Greenhouse-Geisser and Huynh-Feldt epsilons for every
-  within-subject term with more than two levels; the correction is `posthoc.json`
+  within-subject term with more than two levels; the correction is `stat_rules.json`
   `sphericity_correction` (`GG` default; `girden` = HF when the GG epsilon > 0.75).
-- Post-hoc (emmeans): families from the goal (`posthoc.json` `families`); within-subject
+- Post-hoc (emmeans): families from the goal (`stat_rules.json` `families`); within-subject
   contrasts from the multivariate model (each contrast its own variance: a paired t-test without
   between factors). Holm adjustment within each family; `vs_control` uses Dunnett.
   Biodes can ask: `analysis.posthoc = {type: pairwise | vs_control | none, control, adjust}`.

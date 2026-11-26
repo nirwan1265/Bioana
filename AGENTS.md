@@ -162,6 +162,8 @@ Truth scoring of joint tests is not done yet (Simitall should plant truth for
 - 2026-11-25 classical ANOVA (0.8.0): `docs/contracts/stat_tests.md`. Asks Biodes for an optional
   `analysis.posthoc` {type, control, adjust}; asks Simitall for optional correlated occasions
   (AR(1) / random slope) recorded in sim_truth.json. Neither blocks: Bioana runs without them.
+- 2026-11-26 tests on one factor (0.9.0): asks Biodes for optional `analysis.stat_tests` (test ids or
+  "nonparametric") and to write scores/ratings as `primary_outcome.type = "ordinal"`.
 
 ## Packages
 

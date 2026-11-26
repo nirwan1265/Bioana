@@ -1,0 +1,33 @@
+{
+  "_about": "Rules for the classical tests next to the model (R/stat_tests.R, table stat_tests.tsv). The design and the outcome type pick the test (first auto row that matches); assumption checks are reported, not used to switch tests (pre-testing distorts error rates). Biodes may ask for more: analysis.stat_tests = [test ids or families]; analysis.posthoc = {type: pairwise | vs_control | none, control: level, adjust: method}.",
+  "sphericity_correction": "GG",
+  "_note_sphericity_correction": "GG (Greenhouse-Geisser) for every within-subject term with more than two levels; 'girden': Huynh-Feldt when the GG epsilon > girden_threshold (Girden 1992), else GG; 'none'.",
+  "girden_threshold": 0.75,
+  "posthoc_type": "pairwise",
+  "adjust": "holm",
+  "_note_adjust": "p-value adjustment within each family of comparisons (one family per 'by' level, emmeans default). Holm: valid under any dependence and never less powerful than Bonferroni. vs_control uses dunnettx unless analysis.posthoc.adjust says otherwise.",
+  "adjust_vs_control": "dunnettx",
+  "emmeans_model": "multivariate",
+  "_note_emmeans_model": "within-subject contrasts from the multivariate model: each contrast has its own variance (a paired t-test when there are no between factors), so no sphericity assumption.",
+  "families": {
+    "treatment_effect": "main-effect pairs of each treatment factor (averaged over the others); simple effects of the first factor within each level of the second when two treatment factors interact",
+    "interaction": "simple effects: pairs of each goal factor within each level of the other",
+    "time_course": "pairs of time points within each group (within the named group for scope within_group)",
+    "trend": "none: the slope is the test"
+  },
+  "outlier_iqr": 3,
+  "_note_outlier_iqr": "extreme outliers: beyond Q1 - 3 IQR or Q3 + 3 IQR within a cell (rstatix::identify_outliers is.extreme).",
+  "default_family": {
+    "continuous": "parametric",
+    "ordinal": "nonparametric",
+    "binary": "parametric"
+  },
+  "_note_default_family": "family of the test picked automatically per outcome type; others run when asked (analysis.stat_tests or params outcome = list(stat_tests = ...)).",
+  "min_expected": 5,
+  "_note_min_expected": "prop_test: when any expected count is below this, Fisher's exact test is run instead (Cochran 1954); this is the validity of the chi-squared approximation, not an assumption pre-test.",
+  "skew_report_median": 1,
+  "_note_skew_report_median": "descriptives.tsv 'report' column: median (IQR) when |skewness| > this, else mean (SD).",
+  "skew_note": 1,
+  "_note_skew_note": "checks: residual (or difference) skewness beyond this is reported with the note that a log10 or square-root scale, or a GLM, may fit better; Bioana does not transform on its own.",
+  "adjust_nonparametric": "holm"
+}

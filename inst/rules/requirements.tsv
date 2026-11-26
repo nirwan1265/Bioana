@@ -31,6 +31,8 @@ devtools	CRAN	dev	load_all, test, document
 testthat	CRAN	dev	tests
 simitall	GitHub:nirwan1265/simitall	suite	Simitall end-to-end tests (optional)
 afex	CRAN	engines	repeated-measures, mixed and factorial ANOVA with sphericity corrections and effect sizes (stat_tests.tsv)
-emmeans	CRAN	engines	post-hoc comparisons and simple effects after the ANOVA (posthoc.json)
+emmeans	CRAN	engines	post-hoc comparisons and simple effects after the ANOVA (stat_rules.json)
 car	CRAN	engines	type III ANOVA tables and Levene tests used with afex
-rstatix	CRAN	dev	reference values in the ANOVA tests (tests/testthat/test-stat-tests.R)
+rstatix	CRAN	engines	Cohen's d, Wilcoxon r, eta2[H], Kendall's W, Dunn, Games-Howell, pairwise Fisher (stat_tests.tsv); reference values in tests
+effectsize	CRAN	engines	Cohen's h for two proportions (stat_tests.tsv prop_test)
+coin	CRAN	engines	standardized Z behind the Wilcoxon effect size r (rstatix::wilcox_effsize)
