@@ -371,7 +371,7 @@
         },
         "reference": "Kaplan & Meier 1958 JASA 53:457; Mantel 1966 Cancer Chemother Rep 50:163; Cox 1972 JRSS B 34:187; Grambsch & Therneau 1994 Biometrika 81:515; Royston & Parmar 2013 BMC Med Res Methodol 13:152; Therneau survival (CRAN)",
         "tutorial": "docs/engines/survival.md",
-        "note": "competing events censored here (cause-specific: Kaplan-Meier is survival net of the competing risk); cumulative incidence in the competing-risks block; median not reached in genotype_2 / primed: report a landmark survival or the RMST; 480 subsamples in 48 units: the robust score test is primary; the plain log-rank, KM and RMST intervals treat subsamples as independent; proportional hazards rejected on the fixed part (cox.zph global p = 0.00199)",
+        "note": "competing events censored here (cause-specific: Kaplan-Meier is survival net of the competing risk); cumulative incidence in the competing-risks block; times on a 2-days check grid: each event happened in the 2 before its check, so Kaplan-Meier medians and RMST place events up to 2 late (truth scoring interpolates between checks); median not reached in genotype_2 / primed: report a landmark survival or the RMST; 480 subsamples in 48 units: the robust score test is primary; the plain log-rank, KM and RMST intervals treat subsamples as independent; proportional hazards rejected on the fixed part (cox.zph global p = 0.00199)",
         "also": [
           {
             "status": "run",
@@ -619,7 +619,7 @@
         "scale": "hazard ratio after t = 5.98811 (piecewise Cox split at change_time; log scale); estimate / true_effect = treatment, all 2 terms in piecewise$terms",
         "note": "hazards not proportional (delayed_effect): one Cox HR (treatment 0.909, treatment2 0.830) averages the phases",
         "groups": {
-          "covered": 24,
+          "covered": 23,
           "measures": 24,
           "by_measure": {
             "cumulative incidence": {
@@ -627,7 +627,7 @@
               "n": 8
             },
             "event-free RMST": {
-              "covered": 4,
+              "covered": 3,
               "n": 4
             },
             "event-free survival": {
@@ -639,7 +639,8 @@
               "n": 4
             }
           },
-          "note": "per treatment cell vs Simitall outcome_model.groups; intervals treat subsamples as independent"
+          "truth": "marginal",
+          "note": "per treatment cell vs Simitall outcome_model.groups (marginal values); intervals treat subsamples as independent"
         }
       },
       "recovery": {

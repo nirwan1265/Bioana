@@ -1,3 +1,13 @@
+# bioana 0.14.1
+
+- Survival group truth (Simitall 6124b3b): scored against `marginal` (averaged over the realised frailties) when
+  present, conditional kept as `true_conditional`; `event_free_survival_at` / `event_free_rmst` read first
+  (`survival_at` / `rmst` as fallback); landmark keys trimmed.
+- Times on a check grid (all multiples of one step, e.g. checked every 2 days): the truth scoring reads curves
+  between checks by linear interpolation and integrates RMST by the trapezoid rule; the survival report notes
+  that Kaplan-Meier medians and RMST place events up to one step late. Showcase 03: 23 of 24 group measures in
+  their CI against the marginal truth.
+
 # bioana 0.14.0
 
 - `examples/showcase/` (01_gwas_sorghum, 02_rnaseq_drought, 03_germination_survival, same names as Biodes and

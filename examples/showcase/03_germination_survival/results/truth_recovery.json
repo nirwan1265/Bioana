@@ -77,7 +77,7 @@
     "scale": "hazard ratio after t = 5.98811 (piecewise Cox split at change_time; log scale); estimate / true_effect = treatment, all 2 terms in piecewise$terms",
     "note": "hazards not proportional (delayed_effect): one Cox HR (treatment 0.909, treatment2 0.830) averages the phases",
     "groups": {
-      "covered": 24,
+      "covered": 23,
       "measures": 24,
       "by_measure": {
         "cumulative incidence": {
@@ -85,7 +85,7 @@
           "n": 8
         },
         "event-free RMST": {
-          "covered": 4,
+          "covered": 3,
           "n": 4
         },
         "event-free survival": {
@@ -97,7 +97,8 @@
           "n": 4
         }
       },
-      "note": "per treatment cell vs Simitall outcome_model.groups; intervals treat subsamples as independent"
+      "truth": "marginal",
+      "note": "per treatment cell vs Simitall outcome_model.groups (marginal values); intervals treat subsamples as independent"
     }
   }
 }

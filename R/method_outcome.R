@@ -276,7 +276,7 @@
           paths[["survival_groups"]] <- .ba_write_tsv(sgr, file.path(outdir, "survival_group_recovery.tsv"))
           summary$goal_recovery$groups <- list(covered = sum(sgr$covered), measures = nrow(sgr),
                                                by_measure = lapply(split(sgr, trimws(sub(" (at|to) .*$| \\(.*$", "", sgr$measure))), function(x) list(covered = sum(x$covered), n = nrow(x))),
-                                               note = "per treatment cell vs Simitall outcome_model.groups; intervals treat subsamples as independent")
+                                               truth = unique(sgr$truth), note = sprintf("per treatment cell vs Simitall outcome_model.groups (%s values); intervals treat subsamples as independent", paste(unique(sgr$truth), collapse = ", ")))
         }
       }
       if (isFALSE(diag_engine$converged)) { summary$goal_recovery$scored <- FALSE

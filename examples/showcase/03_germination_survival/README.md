@@ -50,11 +50,20 @@ Hazard ratio after day 6 (piecewise Cox), true 0.6:
 | line 2 vs line 1 | 0.630 | 0.454 to 0.873 | yes | 1.25 |
 | primed vs not | 0.667 | 0.488 to 0.911 | yes | 0.84 |
 
-Per group (`results/survival_group_recovery.tsv`, against Simitall's `outcome_model.groups`): 24 of 24 measures in
-their CI. That is the median of germination alone, event-free survival at days 7 and 14, cumulative incidence
-of germination at days 7 and 14, and event-free RMST to day 21, for each of the 4 groups. The median of line 2
-primed (true 19.9 days) is not reached by day 21. Its interval (18, open) contains the truth. These intervals
-treat seeds as independent, so with tray and cell frailties they are a little too narrow.
+Per group (`results/survival_group_recovery.tsv`): 23 of 24 measures are in their 95% CI. The 24 are the median
+of germination alone, event-free survival at days 7 and 14, cumulative incidence of germination at days 7 and 14,
+and event-free RMST to day 21, for each of the 4 groups.
+- **Truth used:** Simitall's `marginal` values, the curves averaged over the trays' and cells' random
+  differences, which is what the pooled data show. The conditional values (an average tray) are in the
+  `true_conditional` column.
+- **Check grid:** germination was checked every 2 days, so each seed germinated sometime in the 2 days before
+  it was found. Bioana reads the curves between checks by linear interpolation and integrates RMST with the
+  trapezoid rule; Kaplan-Meier alone would put every germination at the check, up to 2 days late.
+- **The miss:** event-free RMST of line 1 primed, 11.8 days against 10.5 (CI 10.7 to 12.9). It does contain
+  the conditional value, 11.7.
+- **Median not reached:** line 2 primed reaches half germinated only at the very end of follow-up. Its
+  interval starts at 16.4 days and stays open, so it contains the truth (16.6 marginal).
+- **Intervals:** they treat seeds as independent, so with tray and cell effects they are a little too narrow.
 
 ## results/
 

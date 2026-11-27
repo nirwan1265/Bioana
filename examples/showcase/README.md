@@ -18,7 +18,7 @@ are the same in all three repositories.
 |---|---|---|---|
 | [01](#01-which-genes-control-plant-height-in-sorghum) | Which DNA markers control plant height in 300 sorghum lines? | 6 markers | 6 of the 10 real genes found, no false hits |
 | [02](#02-which-genes-respond-differently-to-drought-in-a-mutant) | Which genes respond to drought differently in a mutant? | 273 genes | 215 of 500 real genes found; 1 in 5 calls is a false hit |
-| [03](#03-does-seed-priming-delay-germination) | Does seed priming slow germination, given that the effect starts late? | yes: germination about a third slower after day 6 | true slowdown 40%; all 24 group summaries correct |
+| [03](#03-does-seed-priming-delay-germination) | Does seed priming slow germination, given that the effect starts late? | yes: germination about a third slower after day 6 | true slowdown 40%; 23 of 24 group summaries correct |
 
 ---
 
@@ -174,7 +174,7 @@ do.call(rbind, lapply(pw, function(x) data.frame(factor = c(treatment = "line", 
       Cox HR treatment2primed 0.83 [0.57, 1.21], p = 0.331
       ...
       Gray's test chi-squared (seed rot before germination)(3) = 2.97, p = 0.396
-      goal truth (survival, terms treatment, treatment2): detected (p = 3.6e-05), estimate 0.63 vs true 0.6, in CI; ...; per group 24/24 measures in CI
+      goal truth (survival, terms treatment, treatment2): detected (p = 3.6e-05), estimate 0.63 vs true 0.6, in CI; ...; per group 23/24 measures in CI
 
                    group   n events median rmst
  genotype_1 / not primed 120     75     14 12.7
@@ -195,7 +195,9 @@ do.call(rbind, lapply(pw, function(x) data.frame(factor = c(treatment = "line", 
   with p = 0.33, which would wrongly suggest no effect. The weighted test chosen by Biodes detects it
   (p = 0.00004).
 - **Group summaries are right.** Medians, the share germinated by day 7 and 14, cumulative incidence and mean
-  time to germination: 24 of 24 match the truth within their confidence intervals.
+  time to germination: 23 of 24 match the truth within their 95% confidence intervals, about what 95%
+  intervals should give. Germination was only checked every 2 days, so Bioana reads the curves between
+  checks instead of assuming each seed germinated on the day it was found.
 - **Seed rot does not differ between groups** (p = 0.40), as simulated.
 
 [Full results](03_germination_survival)

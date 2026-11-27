@@ -44,13 +44,14 @@ res <- bioana_analyze("03_germination_survival")
       weighted log-rank chi-squared (fh_0_1, prespecified)(3) = 23.2, p = 3.6e-05
       Cox HR treatment2primed 0.83 [0.57, 1.21], p = 0.331
       ...
-      goal truth (survival, terms treatment, treatment2): detected (p = 3.6e-05), estimate 0.63 vs true 0.6, in CI; piecewise HR after t = 5.99: treatment 0.63 [0.454, 0.873] vs 0.6, treatment2 0.667 [0.488, 0.911] vs 0.6; ...; per group 24/24 measures in CI
+      goal truth (survival, terms treatment, treatment2): detected (p = 3.6e-05), estimate 0.63 vs true 0.6, in CI; piecewise HR after t = 5.99: treatment 0.63 [0.454, 0.873] vs 0.6, treatment2 0.667 [0.488, 0.911] vs 0.6; ...; per group 23/24 measures in CI
 ```
 
 **The answer, graded:** yes. After day 6, primed seeds germinate at 0.67 times the rate of unprimed seeds
 (95% CI 0.49 to 0.91), against a truth of 0.6. A standard Cox model, which averages early and late, would have
-reported 0.83 with p = 0.33 and missed it. All 24 group summaries (medians, share germinated by day 7 and 14,
-mean time to germination) match the truth.
+reported 0.83 with p = 0.33 and missed it. 23 of 24 group summaries (medians, share germinated by day 7 and 14,
+mean time to germination) match the truth within their confidence intervals, about what 95% intervals should
+give.
 
 ## Two more examples
 

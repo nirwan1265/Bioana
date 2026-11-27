@@ -49,6 +49,10 @@
   summ <- data.frame(group = lev, n = tb[, "records"], events = tb[, "events"], median = tb[, "median"], median_lcl = tb[, "0.95LCL"], median_ucl = tb[, "0.95UCL"],
                      q25 = qe[, 1], q75 = qe[, ncol(qe)], rmst = tb[, "rmean"], rmst_se = tb[, "se(rmean)"], tau = tau, max_followup = as.numeric(maxt[lev]),
                      row.names = NULL, stringsAsFactors = FALSE)
+  tt_ <- sort(unique(d$y_[d$y_ > 0])); st_ <- if (length(tt_) > 2) min(diff(tt_)) else NA_real_
+  if (is.finite(st_) && st_ > 0 && all(abs(tt_ / st_ - round(tt_ / st_)) < 1e-8) && length(tt_) <= 60)
+    notes <- c(notes, sprintf("times on a %g-%s check grid: each event happened in the %g before its check, so Kaplan-Meier medians and RMST place events up to %g late (truth scoring interpolates between checks)",
+                              st_, design$spec$primary_outcome$unit %||% "unit", st_, st_))
   if (any(is.na(summ$median))) notes <- c(notes, sprintf("median not reached in %s: report a landmark survival or the RMST", paste(summ$group[is.na(summ$median)], collapse = ", ")))
   land <- NULL
   if (length(sv$landmarks)) {
@@ -404,6 +408,7 @@
 # cells): median, survival net of competing events at the landmark days (Kaplan-Meier with competing events
 # censored), cumulative incidence of the event (cmprsk::cuminc), RMST to the truth's horizon. Intervals: KM
 # log-log / Greenwood, cuminc variance; they treat subsamples as independent (too narrow with shared frailties).
+# Simitall's `marginal` block (over the realised frailties) is the truth for these observed curves.
 .ba_survival_group_recovery <- function(groups, frame, p, alpha = 0.05, tau = NULL) {
   if (!length(groups)) return(NULL)
   treat <- names(p$col)[vapply(names(p$col), function(v) identical(p$role[[v]] %||% "treatment", "treatment") && v %in% names(frame) && !is.numeric(frame[[v]]), logical(1))]
@@ -412,26 +417,56 @@
   d$e1_ <- as.integer(ev_raw == 1)
   d$cell_ <- if (length(treat)) do.call(paste, c(lapply(d[treat], as.character), sep = ":")) else "all"
   q <- stats::qnorm(1 - alpha / 2); rows <- list()
-  add <- function(g, m, tv, est, lo, hi) rows[[length(rows) + 1L]] <<- data.frame(group = g, measure = m, true = as.numeric(tv), estimate = as.numeric(est), ci_low = as.numeric(lo),
-                                                                                 ci_high = as.numeric(hi), stringsAsFactors = FALSE)
+  # check grid: every time a multiple of one step (e.g. germination checked every 2 days) -> interval-censored
+  tt_ <- sort(unique(d$y_[d$y_ > 0])); st_ <- if (length(tt_) > 2) min(diff(tt_)) else NA_real_
+  grid <- if (is.finite(st_) && st_ > 0 && all(abs(tt_ / st_ - round(tt_ / st_)) < 1e-8) && length(tt_) <= 60) st_ else NA_real_
+  add <- function(g, m, tv, est, lo, hi, tc = NA, src = "conditional") rows[[length(rows) + 1L]] <<- data.frame(group = g, measure = m, true = as.numeric(tv), estimate = as.numeric(est),
+    ci_low = as.numeric(lo), ci_high = as.numeric(hi), true_conditional = as.numeric(tc %||% NA), truth = src, stringsAsFactors = FALSE)
   for (g in intersect(names(groups), unique(d$cell_))) {
-    gt <- groups[[g]]; dg <- d[d$cell_ == g, , drop = FALSE]
-    # Simitall: median = the event alone (net of competing events: KM with them censored); survival_at and rmst
-    # = free of any event (KM of the first event of any kind), as its truth computes them
+    gc <- groups[[g]]; dg <- d[d$cell_ == g, , drop = FALSE]
+    # Simitall 6124b3b: score against `marginal` (averaged over the realised frailties) when present; the
+    # conditional value (an average cluster) is kept as true_conditional. event_free_* (free of any event)
+    # first, survival_at / rmst as the older names of the same values; landmark keys trimmed.
+    gm <- gc$marginal %||% gc; src <- if (!is.null(gc$marginal)) "marginal" else "conditional"
+    lm_ <- function(x) if (length(x)) stats::setNames(unname(x), trimws(names(x)))
+    efs <- function(x) lm_(x$event_free_survival_at %||% x$survival_at); efr <- function(x) x$event_free_rmst %||% x$rmst
     km <- survival::survfit(survival::Surv(y_, e1_) ~ 1, data = dg, conf.type = "log-log", conf.int = 1 - alpha)
     ka <- survival::survfit(survival::Surv(y_, as.integer(ev_raw[d$cell_ == g] > 0)) ~ 1, data = dg, conf.type = "log-log", conf.int = 1 - alpha)
-    tb <- summary(km)$table
-    if (!is.null(gt$median)) add(g, "median (event alone)", gt$median, tb[["median"]], tb[[grep("LCL", names(tb), value = TRUE)[1]]], tb[[grep("UCL", names(tb), value = TRUE)[1]]])
-    for (t in names(gt$survival_at)) { s <- summary(ka, times = as.numeric(t), extend = TRUE)
-      add(g, sprintf("event-free survival at %s", t), gt$survival_at[[t]], s$surv, s$lower, s$upper) }
-    if (!is.null(gt$rmst)) { ta <- if (length(tau) && is.finite(tau)) tau else max(dg$y_)
-      r <- summary(ka, rmean = ta)$table; add(g, sprintf("event-free RMST to %g", ta), gt$rmst, r[["rmean"]], r[["rmean"]] - q * r[["se(rmean)"]], r[["rmean"]] + q * r[["se(rmean)"]]) }
-    if (length(gt$cif_event_at) && requireNamespace("cmprsk", quietly = TRUE) && any(ev_raw[d$cell_ == g] > 1)) {
+    if (!is.na(grid)) {
+      # times on a check grid: each event lies in (check - w, check]; curves are read between checks by linear
+      # interpolation and RMST by the trapezoid rule (Kaplan-Meier would put every event at its check)
+      ck <- seq(0, max(d$y_), by = grid)
+      at <- function(f, t) { s <- summary(f, times = ck, extend = TRUE); i <- function(v) stats::approx(c(0, s$time), c(1, v), xout = t, rule = 2, ties = "ordered")$y
+        c(est = i(s$surv), lo = i(s$lower), hi = i(s$upper)) }
+      med <- function(f) { s <- summary(f, times = ck, extend = TRUE)
+        x <- function(v) { v <- c(1, v); tt <- c(0, s$time); j <- which(v <= 0.5)[1]; if (is.na(j)) NA_real_ else if (v[j - 1] == v[j]) tt[j] else tt[j - 1] + (v[j - 1] - 0.5) / (v[j - 1] - v[j]) * (tt[j] - tt[j - 1]) }
+        c(est = x(s$surv), lo = x(s$lower), hi = x(s$upper)) }
+      if (!is.null(gm$median)) { m_ <- med(km); add(g, "median (event alone)", gm$median, m_[["est"]], m_[["lo"]], m_[["hi"]], gc$median, src) }   # the lower curve reaches 0.5 first
+      sv <- efs(gm); svc <- efs(gc)
+      for (t in names(sv)) { a_ <- at(ka, as.numeric(t)); add(g, sprintf("event-free survival at %s", t), sv[[t]], a_[["est"]], a_[["lo"]], a_[["hi"]], svc[[t]] %||% NA, src) }
+      if (!is.null(efr(gm))) { ta <- if (length(tau) && is.finite(tau)) tau else max(dg$y_)
+        s <- summary(ka, times = ck, extend = TRUE); tt <- c(0, s$time, ta); v <- c(1, s$surv, utils::tail(s$surv, 1)); keep_ <- tt <= ta
+        tt <- tt[keep_]; v <- v[keep_]; if (max(tt) < ta) { tt <- c(tt, ta); v <- c(v, utils::tail(v, 1)) }
+        rm_ <- sum(diff(tt) * (utils::head(v, -1) + utils::tail(v, -1)) / 2)
+        se_ <- summary(ka, rmean = ta)$table[["se(rmean)"]]
+        add(g, sprintf("event-free RMST to %g", ta), efr(gm), rm_, rm_ - q * se_, rm_ + q * se_, efr(gc) %||% NA, src) }
+    } else {
+      tb <- summary(km)$table
+      if (!is.null(gm$median)) add(g, "median (event alone)", gm$median, tb[["median"]], tb[[grep("LCL", names(tb), value = TRUE)[1]]], tb[[grep("UCL", names(tb), value = TRUE)[1]]], gc$median, src)
+      sv <- efs(gm); svc <- efs(gc)
+      for (t in names(sv)) { s <- summary(ka, times = as.numeric(t), extend = TRUE)
+        add(g, sprintf("event-free survival at %s", t), sv[[t]], s$surv, s$lower, s$upper, svc[[t]] %||% NA, src) }
+      if (!is.null(efr(gm))) { ta <- if (length(tau) && is.finite(tau)) tau else max(dg$y_)
+        r <- summary(ka, rmean = ta)$table; add(g, sprintf("event-free RMST to %g", ta), efr(gm), r[["rmean"]], r[["rmean"]] - q * r[["se(rmean)"]], r[["rmean"]] + q * r[["se(rmean)"]], efr(gc) %||% NA, src) }
+    }
+    cf <- lm_(gm$cif_event_at); cfc <- lm_(gc$cif_event_at)
+    if (length(cf) && requireNamespace("cmprsk", quietly = TRUE) && any(ev_raw[d$cell_ == g] > 1)) {
       ci <- cmprsk::cuminc(dg$y_, ev_raw[d$cell_ == g], cencode = 0)
-      tp <- cmprsk::timepoints(ci, as.numeric(names(gt$cif_event_at)))
-      k <- grep(" 1$", rownames(tp$est))[1]
-      for (j in seq_along(gt$cif_event_at)) { e <- tp$est[k, j]; v <- tp$var[k, j]
-        add(g, sprintf("cumulative incidence at %s", names(gt$cif_event_at)[j]), gt$cif_event_at[[j]], e, e - q * sqrt(v), e + q * sqrt(v)) }
+      tq <- as.numeric(names(cf)); tg <- if (!is.na(grid)) sort(unique(c(0, seq(0, max(d$y_), by = grid)))) else tq
+      tp <- cmprsk::timepoints(ci, tg[tg > 0]); k <- grep(" 1$", rownames(tp$est))[1]
+      ee <- c(0, tp$est[k, ]); vv <- c(0, tp$var[k, ]); tt <- c(0, tg[tg > 0]); ee[is.na(ee)] <- utils::tail(stats::na.omit(ee), 1); vv[is.na(vv)] <- utils::tail(stats::na.omit(vv), 1)
+      for (j in seq_along(cf)) { e <- stats::approx(tt, ee, xout = tq[j], rule = 2, ties = "ordered")$y; v <- stats::approx(tt, vv, xout = tq[j], rule = 2, ties = "ordered")$y
+        add(g, sprintf("cumulative incidence at %s", names(cf)[j]), cf[[j]], e, e - q * sqrt(v), e + q * sqrt(v), cfc[[names(cf)[j]]] %||% NA, src) }
     }
   }
   if (!length(rows)) return(NULL)

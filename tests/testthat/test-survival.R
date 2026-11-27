@@ -346,7 +346,8 @@ test_that("delayed effect on two factors: joint and per-factor weighted log-rank
   jsonlite::write_json(spec, file.path(d, "study_spec.json"), auto_unbox = TRUE, pretty = TRUE)
   utils::write.csv(m[c("unit", "line", "priming")], file.path(d, "field_layout.csv"), row.names = FALSE)
   utils::write.table(m, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
-  grp <- list(`L1:no` = list(median = 9, survival_at = list(`7` = 0.5), rmst = 10, cif_event_at = list(`7` = 0.4)))
+  grp <- list(`L1:no` = list(median = 9, event_free_survival_at = list(`7` = 0.5), event_free_rmst = 10, cif_event_at = list(` 7` = 0.4),
+                             marginal = list(median = 8, event_free_survival_at = list(`7` = 0.45), event_free_rmst = 9.5, cif_event_at = list(`7` = 0.42))))
   jsonlite::write_json(list(outcome_model = list(family = "delayed_effect", proportional_hazards = FALSE, change_time = t0, rmst_tau = 21, groups = grp),
                             goal_truth = list(goal = "survival", model_terms = list("treatment", "treatment2"), status = "planted", true_effect = 0.6, proportional_hazards = FALSE,
                                               hazard_ratios = list(treatment = list(L1 = 1, L2 = 0.6), treatment2 = list(no = 1, yes = 0.6)))),
@@ -369,4 +370,16 @@ test_that("delayed effect on two factors: joint and per-factor weighted log-rank
   expect_equal(sg$estimate[sg$measure == "event-free survival at 7"], summary(ka, times = 7)$surv)
   expect_equal(sg$estimate[sg$measure == "median (event alone)"], unname(summary(km)$table["median"]))
   expect_equal(sg$estimate[sg$measure == "event-free RMST to 21"], unname(summary(ka, rmean = 21)$table["rmean"]))
+  expect_true(all(sg$truth == "marginal")); expect_equal(sg$true[sg$measure == "median (event alone)"], 8); expect_equal(sg$true_conditional[sg$measure == "median (event alone)"], 9)
+  expect_equal(sg$measure[grepl("cumulative", sg$measure)], "cumulative incidence at 7")   # key " 7" trimmed
+  # times on a 2-day check grid: curves interpolated between checks, RMST by the trapezoid rule
+  g1$time <- pmin(ceiling(g1$time / 2) * 2, 20)
+  m2 <- m; m2$time[m$line == "L1" & m$priming == "no"] <- g1$time; m2$time <- pmin(ceiling(m2$time / 2) * 2, 20)
+  utils::write.table(m2, file.path(d, "sample_metadata_template.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+  utils::capture.output(r2 <- bioana_analyze(d, secondary = FALSE))
+  expect_match(r2$summary$analyses$outcome$stat_test$note, "2-days check grid|2-day check grid|check grid")
+  sg2 <- utils::read.delim(list.files(d, "survival_group_recovery.tsv", recursive = TRUE, full.names = TRUE))
+  g2 <- m2[m2$line == "L1" & m2$priming == "no", ]
+  s2 <- summary(survival::survfit(survival::Surv(time, event > 0) ~ 1, data = g2), times = c(6, 8), extend = TRUE)$surv
+  expect_equal(sg2$estimate[sg2$measure == "event-free survival at 7"], mean(s2))
 })
