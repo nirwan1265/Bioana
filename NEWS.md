@@ -1,3 +1,10 @@
+# bioana 0.14.2
+
+- README rewritten as a description of the tool (suite figure, what Bioana does, analysis types, engines,
+  goals, safeguards, outputs, the fields apps read, install, R usage); example walkthroughs move to BioCore.
+  `summary$analyses[[id]]$engine`, `$goal_recovery`, `$recovery` and the returned `results` / `recovery` are
+  documented as stable for apps.
+
 # bioana 0.14.1
 
 - Survival group truth (Simitall 6124b3b): scored against `marginal` (averaged over the realised frailties) when
